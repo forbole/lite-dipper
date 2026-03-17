@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lite-dipper",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-03-17",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    {
+      "pattern": "lite.desmos.network",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "DESMOS_CHAIN_ID": "desmos-mainnet",
+    "DESMOS_CHAIN_NAME": "Desmos",
+    "DESMOS_RPC_URL": "https://rpc.mainnet.desmos.network:443",
+    "DESMOS_REST_URL": "https://api.mainnet.desmos.network",
+    "DESMOS_GRPC_URL": "https://grpc.mainnet.desmos.network:443"
+  }
+}
