@@ -5,7 +5,8 @@ type Star = {
   y: number;
   vx: number;
   vy: number;
-  radius: number;
+  depth: number;
+  baseRadius: number;
   hue: number;
 };
 
@@ -13,12 +14,15 @@ const STAR_COUNT = 48;
 const CONNECTION_DISTANCE = 150;
 
 function createStar(width: number, height: number): Star {
+  const depth = 0.35 + Math.random() * 0.9;
+
   return {
     x: Math.random() * width,
     y: Math.random() * height,
     vx: (Math.random() - 0.5) * 0.28,
     vy: (Math.random() - 0.5) * 0.28,
-    radius: 1 + Math.random() * 2.2,
+    depth,
+    baseRadius: 0.8 + depth * 1.8,
     hue: Math.random() > 0.72 ? 46 : 197
   };
 }
@@ -73,6 +77,8 @@ export function GalaxyBackground() {
     resize();
 
     const draw = () => {
+      const now = performance.now();
+
       context.clearRect(0, 0, width, height);
 
       const glow = context.createRadialGradient(width * 0.55, height * 0.42, 0, width * 0.55, height * 0.42, width * 0.55);
@@ -84,8 +90,9 @@ export function GalaxyBackground() {
 
       for (const star of stars) {
         if (!mediaQuery.matches) {
-          star.x += star.vx;
-          star.y += star.vy;
+          const speedMultiplier = 0.35 + star.depth * 0.9;
+          star.x += star.vx * speedMultiplier;
+          star.y += star.vy * speedMultiplier;
 
           if (star.x <= -12 || star.x >= width + 12) {
             star.vx *= -1;
@@ -97,10 +104,15 @@ export function GalaxyBackground() {
         }
       }
 
-      for (let index = 0; index < stars.length; index += 1) {
-        const star = stars[index];
+      const projectedStars = stars.map((star, index) => {
+        let elasticOffsetX = 0;
+        let elasticOffsetY = 0;
 
-        for (let innerIndex = index + 1; innerIndex < stars.length; innerIndex += 1) {
+        for (let innerIndex = 0; innerIndex < stars.length; innerIndex += 1) {
+          if (innerIndex === index) {
+            continue;
+          }
+
           const target = stars[innerIndex];
           const dx = target.x - star.x;
           const dy = target.y - star.y;
@@ -110,25 +122,71 @@ export function GalaxyBackground() {
             continue;
           }
 
+          const closeness = 1 - distance / CONNECTION_DISTANCE;
+          const phase = index * 0.61 + innerIndex * 0.37;
+          const wobble = Math.sin(now * 0.006 + phase) * closeness * 2.4;
+          const swirlX = Math.cos(now * 0.004 + phase * 1.3) * closeness * 1.2;
+          const swirlY = Math.sin(now * 0.005 + phase * 1.1) * closeness * 1.2;
+          const normalizedDx = dx / Math.max(distance, 1);
+          const normalizedDy = dy / Math.max(distance, 1);
+
+          elasticOffsetX += (-normalizedDx * wobble + swirlX) * (0.45 + star.depth * 0.75);
+          elasticOffsetY += (-normalizedDy * wobble + swirlY) * (0.45 + star.depth * 0.75);
+        }
+
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const depthPulse = mediaQuery.matches ? 0 : Math.sin(now * 0.0009 + index * 0.47) * 0.045;
+        const projectionScale = 0.72 + star.depth * 0.42 + depthPulse;
+        const renderX = centerX + (star.x - centerX) * projectionScale + elasticOffsetX;
+        const renderY = centerY + (star.y - centerY) * projectionScale + elasticOffsetY;
+
+        return {
+          renderX,
+          renderY,
+          radius: star.baseRadius * (0.72 + star.depth * 0.85),
+          glowRadius: star.baseRadius * (2.8 + star.depth * 2.4),
+          lineOpacity: 0.08 + star.depth * 0.14,
+          fillOpacity: 0.45 + star.depth * 0.5,
+          glowOpacity: 0.05 + star.depth * 0.12
+        };
+      });
+
+      for (let index = 0; index < stars.length; index += 1) {
+        const star = projectedStars[index];
+
+        for (let innerIndex = index + 1; innerIndex < stars.length; innerIndex += 1) {
+          const target = projectedStars[innerIndex];
+          const dx = target.renderX - star.renderX;
+          const dy = target.renderY - star.renderY;
+          const distance = Math.hypot(dx, dy);
+
+          if (distance > CONNECTION_DISTANCE) {
+            continue;
+          }
+
           const opacity = 1 - distance / CONNECTION_DISTANCE;
-          context.strokeStyle = `rgba(148, 163, 184, ${opacity * 0.18})`;
+          context.strokeStyle = `rgba(148, 163, 184, ${opacity * Math.min(star.lineOpacity, target.lineOpacity)})`;
           context.lineWidth = 1;
           context.beginPath();
-          context.moveTo(star.x, star.y);
-          context.lineTo(target.x, target.y);
+          context.moveTo(star.renderX, star.renderY);
+          context.lineTo(target.renderX, target.renderY);
           context.stroke();
         }
       }
 
-      for (const star of stars) {
-        context.fillStyle = `hsla(${star.hue}, 90%, 72%, 0.9)`;
+      for (let index = 0; index < stars.length; index += 1) {
+        const star = stars[index];
+        const projected = projectedStars[index];
+
+        context.fillStyle = `hsla(${star.hue}, 90%, 72%, ${projected.fillOpacity})`;
         context.beginPath();
-        context.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+        context.arc(projected.renderX, projected.renderY, projected.radius, 0, Math.PI * 2);
         context.fill();
 
-        context.fillStyle = `hsla(${star.hue}, 95%, 72%, 0.14)`;
+        context.fillStyle = `hsla(${star.hue}, 95%, 72%, ${projected.glowOpacity})`;
         context.beginPath();
-        context.arc(star.x, star.y, star.radius * 4.5, 0, Math.PI * 2);
+        context.arc(projected.renderX, projected.renderY, projected.glowRadius, 0, Math.PI * 2);
         context.fill();
       }
 
