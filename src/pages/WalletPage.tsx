@@ -58,6 +58,7 @@ export function WalletPage() {
   const [claimAllSubmitting, setClaimAllSubmitting] = useState(false);
   const [rewardResult, setRewardResult] = useState<string | null>(null);
   const [rewardError, setRewardError] = useState<string | null>(null);
+  const [connectIntent, setConnectIntent] = useState<"keplr" | "ledger" | null>(null);
   const availableBalanceAmount = data?.balances.find((balance) => balance.denom === DESMOS_CHAIN.denom)?.amount ?? "0";
   const availableBalanceDisplay = formatFixedDsmFromMicro(availableBalanceAmount);
   const claimableDelegations = data?.delegations.filter((delegation) => isPositiveDecimal(delegation.rewardAmount)) ?? [];
@@ -155,6 +156,26 @@ export function WalletPage() {
     }
   }
 
+  async function handleConnectKeplr() {
+    setConnectIntent("keplr");
+
+    try {
+      await connectKeplr();
+    } finally {
+      setConnectIntent(null);
+    }
+  }
+
+  async function handleConnectLedger() {
+    setConnectIntent("ledger");
+
+    try {
+      await connectLedger();
+    } finally {
+      setConnectIntent(null);
+    }
+  }
+
   if (!connection) {
     return (
       <Panel title="Connect Wallet" subtitle="Keplr and Ledger Desmos app supported">
@@ -163,26 +184,42 @@ export function WalletPage() {
             type="button"
             disabled={connecting}
             onClick={() => {
-              void connectKeplr().catch(() => undefined);
+              void handleConnectKeplr().catch(() => undefined);
             }}
             className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(14,165,233,0.15),rgba(37,99,235,0.08))] p-5 text-left transition hover:border-sky-300/30 hover:bg-[linear-gradient(135deg,rgba(14,165,233,0.22),rgba(37,99,235,0.12))] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <p className="font-display text-xl text-white">Keplr</p>
-            <p className="mt-2 text-sm text-slate-300">Extension-driven flow with chain suggestion and account discovery.</p>
+            <p className="font-display text-xl text-white">{connectIntent === "keplr" && connecting ? "Connecting Keplr…" : "Keplr"}</p>
+            <p className="mt-2 text-sm text-slate-300">
+              {connectIntent === "keplr" && connecting
+                ? "Waiting for the Keplr extension to approve the connection."
+                : "Extension-driven flow with chain suggestion and account discovery."}
+            </p>
           </button>
 
           <button
             type="button"
             disabled={connecting}
             onClick={() => {
-              void connectLedger().catch(() => undefined);
+              void handleConnectLedger().catch(() => undefined);
             }}
             className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(252,211,77,0.15),rgba(249,115,22,0.08))] p-5 text-left transition hover:border-amber-300/30 hover:bg-[linear-gradient(135deg,rgba(252,211,77,0.22),rgba(249,115,22,0.12))] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <p className="font-display text-xl text-white">Ledger</p>
-            <p className="mt-2 text-sm text-slate-300">Direct browser signing path with account selection. Use the Desmos app on the Ledger device.</p>
+            <p className="font-display text-xl text-white">
+              {connectIntent === "ledger" && connecting ? "Connecting Ledger…" : "Ledger"}
+            </p>
+            <p className="mt-2 text-sm text-slate-300">
+              {connectIntent === "ledger" && connecting
+                ? "Communicating with Ledger now. Keep the Desmos app open on your device."
+                : "Direct browser signing path with account selection. Use the Desmos app on the Ledger device."}
+            </p>
           </button>
         </div>
+
+        {connectIntent === "ledger" && connecting ? (
+          <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            Loading Ledger addresses. This can take a few seconds while the app talks to your device.
+          </div>
+        ) : null}
 
         {ledgerSelection ? (
           <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/45 p-4">
