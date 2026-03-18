@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { AccountDetailsPage } from "../pages/AccountDetailsPage";
 import { BlockDetailsPage } from "../pages/BlockDetailsPage";
 import { BlocksPage } from "../pages/BlocksPage";
 import { DashboardPage } from "../pages/DashboardPage";
@@ -80,6 +81,10 @@ export const router = createBrowserRouter([
       {
         path: "wallet",
         element: <WalletPage />
+      },
+      {
+        path: "accounts/:accountAddress",
+        element: <AccountDetailsPage />
       },
       {
         path: "*",

@@ -208,7 +208,7 @@ function deriveAccountAddressFromOperatorAddress(operatorAddress: string): strin
   }
 
   const { hrp, data } = decodeBech32(operatorAddress);
-  const accountPrefix = hrp.endsWith("valoper") ? hrp.slice(0, -8) : hrp;
+  const accountPrefix = hrp.endsWith("valoper") ? hrp.slice(0, -"valoper".length) : hrp;
   const bytes = convertBits(data, 5, 8, false);
 
   return encodeBech32(accountPrefix, convertBits(bytes, 8, 5, true));
@@ -240,6 +240,10 @@ function getCacheTtl(pathname: string): number {
   }
 
   if (pathname.startsWith("/api/wallet/")) {
+    return 12;
+  }
+
+  if (pathname.startsWith("/api/accounts/")) {
     return 12;
   }
 
@@ -639,6 +643,36 @@ async function getRecentTransactions(env: Env, limit: number, event?: string) {
   );
 }
 
+async function searchTransactionsByEvent(env: Env, query: string, limit: number) {
+  const searchResponse = await fetchRpcJson(env, "/tx_search", {
+    query: `"${query}"`,
+    prove: "false",
+    page: "1",
+    per_page: String(limit),
+    order_by: `"desc"`
+  });
+
+  return searchResponse?.result?.txs ?? [];
+}
+
+function sortRpcSearchTransactions(left: any, right: any) {
+  const rightHeight = BigInt(String(right?.height ?? 0));
+  const leftHeight = BigInt(String(left?.height ?? 0));
+
+  if (rightHeight > leftHeight) {
+    return 1;
+  }
+
+  if (rightHeight < leftHeight) {
+    return -1;
+  }
+
+  const rightIndex = Number(right?.index ?? -1);
+  const leftIndex = Number(left?.index ?? -1);
+
+  return rightIndex - leftIndex;
+}
+
 async function getValidators(env: Env) {
   return (await getValidatorDirectory(env)).validators;
 }
@@ -850,6 +884,99 @@ async function getWalletOverview(env: Env, address: string) {
   };
 }
 
+async function getRecentTransactionsForAccount(env: Env, address: string, limit: number) {
+  const queries = [
+    `message.sender='${address}'`,
+    `transfer.sender='${address}'`,
+    `transfer.recipient='${address}'`,
+    `coin_spent.spender='${address}'`,
+    `coin_received.receiver='${address}'`,
+    `tx.fee_payer='${address}'`,
+    `withdraw_rewards.delegator='${address}'`,
+    `delegate.delegator='${address}'`,
+    `redelegate.delegator='${address}'`,
+    `unbond.delegator='${address}'`
+  ];
+  const searchResponses = await Promise.all(
+    queries.map((query) => searchTransactionsByEvent(env, query, Math.max(limit, 12)).catch(() => []))
+  );
+  const txs = Array.from(
+    new Map(
+      searchResponses
+        .flat()
+        .filter((tx: any) => Boolean(tx?.hash))
+        .map((tx: any) => [tx.hash, tx])
+    ).values()
+  ).sort(sortRpcSearchTransactions);
+  const recentTxs = txs.slice(0, limit);
+  const details = await Promise.all(
+    recentTxs.map((tx: any) => fetchTransactionPayloadByHash(env, tx?.hash ?? "").catch(() => null))
+  );
+
+  return details
+    .filter((detail: any) => Boolean(detail))
+    .map((detail: any) => normalizeTransactionSummary(detail?.tx_response, detail?.tx))
+    .sort((left, right) => {
+      const rightHeight = BigInt(String(right.height || 0));
+      const leftHeight = BigInt(String(left.height || 0));
+
+      if (rightHeight > leftHeight) {
+        return 1;
+      }
+
+      if (rightHeight < leftHeight) {
+        return -1;
+      }
+
+      return (right.timestamp ?? "").localeCompare(left.timestamp ?? "");
+    })
+    .slice(0, limit);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timeoutId = setTimeout(() => resolve(fallback), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function getAccountDetails(env: Env, address: string) {
+  const validatorDirectoryPromise = getValidatorDirectory(env);
+  const [balancesResponse, delegationsResponse, recentTransactions] = await Promise.all([
+    fetchRestJson(env, `/cosmos/bank/v1beta1/balances/${address}`),
+    fetchRestJson(env, `/cosmos/staking/v1beta1/delegations/${address}`),
+    withTimeout(getRecentTransactionsForAccount(env, address, 12).catch(() => []), 5_000, [])
+  ]);
+  const validatorDirectory = await validatorDirectoryPromise;
+
+  return {
+    address,
+    balances: (balancesResponse?.balances ?? []).map((balance: any) => ({
+      denom: balance?.denom ?? "",
+      amount: balance?.amount ?? "0"
+    })),
+    delegations: (delegationsResponse?.delegation_responses ?? []).map((delegation: any) => ({
+      validatorAddress: delegation?.delegation?.validator_address ?? "",
+      moniker:
+        validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.moniker ?? "",
+      identity:
+        validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.identity ?? "",
+      amount: delegation?.balance?.amount ?? "0"
+    })),
+    recentTransactions
+  };
+}
+
 async function handleApi(request: Request, env: Env) {
   const url = new URL(request.url);
   const segments = url.pathname.split("/").filter(Boolean);
@@ -917,6 +1044,10 @@ async function handleApi(request: Request, env: Env) {
     segments[3] === "overview"
   ) {
     return json(await getWalletOverview(env, segments[2]));
+  }
+
+  if (segments[0] === "api" && segments[1] === "accounts" && segments[2]) {
+    return json(await getAccountDetails(env, segments[2]));
   }
 
   return json({ error: "Not found" }, { status: 404 });

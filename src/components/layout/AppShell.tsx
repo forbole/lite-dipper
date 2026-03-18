@@ -32,6 +32,10 @@ function deriveHeading(pathname: string): string {
     return "Proposal Details";
   }
 
+  if (pathname.startsWith("/accounts/")) {
+    return "Account Details";
+  }
+
   const match = NAV_ITEMS.find((item) => item.to === pathname);
   return match?.label ?? "Lite-Dipper";
 }

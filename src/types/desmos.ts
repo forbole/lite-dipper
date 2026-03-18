@@ -168,3 +168,18 @@ export interface WalletOverviewPayload {
     rewardAmount: string;
   }>;
 }
+
+export interface AccountDetailsPayload {
+  address: string;
+  balances: Array<{
+    denom: string;
+    amount: string;
+  }>;
+  delegations: Array<{
+    validatorAddress: string;
+    moniker?: string;
+    identity?: string;
+    amount: string;
+  }>;
+  recentTransactions: TransactionSummary[];
+}

@@ -283,7 +283,15 @@ export function ValidatorDetailsPage() {
                 )}
               </p>
               <p>Identity: {data.validator.identity || "N/A"}</p>
-              <p>Account: {truncateMiddle(data.validator.accountAddress)}</p>
+              <p>
+                Account:{" "}
+                <Link
+                  to={`/accounts/${data.validator.accountAddress}`}
+                  className="text-sky-200 transition hover:text-white"
+                >
+                  {truncateMiddle(data.validator.accountAddress)}
+                </Link>
+              </p>
               <p>Consensus PubKey: {truncateMiddle(data.validator.consensusPubKey)}</p>
             </div>
           </div>
