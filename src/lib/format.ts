@@ -125,6 +125,20 @@ export function sumMicroAmounts(values: Array<string | null | undefined>): strin
     .toString();
 }
 
+export function hasPositiveMicroAmount(value: string | null | undefined): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const normalized = value.trim();
+
+  if (!/^\d+$/.test(normalized)) {
+    return false;
+  }
+
+  return BigInt(normalized) > 0n;
+}
+
 export function isPositiveDecimal(value: string): boolean {
   const normalized = value.trim();
 

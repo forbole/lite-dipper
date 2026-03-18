@@ -11,6 +11,7 @@ import {
   formatFixedDsmFromMicro,
   formatNumber,
   formatTimeRemaining,
+  hasPositiveMicroAmount,
   sumMicroAmounts,
   truncateMiddle
 } from "../lib/format";
@@ -46,6 +47,7 @@ export function AccountDetailsPage() {
   const delegatedAmount = sumMicroAmounts(data.delegations.map((delegation) => delegation.amount));
   const unbondingAmount = sumMicroAmounts(data.unbondingDelegations.map((delegation) => delegation.amount));
   const redelegatingAmount = sumMicroAmounts(data.redelegations.map((delegation) => delegation.amount));
+  const visibleDelegations = data.delegations.filter((delegation) => hasPositiveMicroAmount(delegation.amount));
   const totalBalanceAmount = sumMicroAmounts([
     availableBalanceAmount,
     delegatedAmount,
@@ -103,10 +105,10 @@ export function AccountDetailsPage() {
               <div>
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Delegations</p>
                 <div className="mt-3 space-y-2">
-                  {data.delegations.length === 0 ? (
+                  {visibleDelegations.length === 0 ? (
                     <p className="text-sm text-slate-300">No active delegations.</p>
                   ) : (
-                    data.delegations.map((delegation) => (
+                    visibleDelegations.map((delegation) => (
                       <Link
                         key={delegation.validatorAddress}
                         to={`/validators/${delegation.validatorAddress}`}

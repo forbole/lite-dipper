@@ -10,6 +10,7 @@ import {
   formatFixedDsmFromMicro,
   formatFixedDsmFromMicroDecimal,
   formatTimeRemaining,
+  hasPositiveMicroAmount,
   isPositiveDecimal,
   parseDsmToMicro,
   truncateMiddle
@@ -61,6 +62,7 @@ export function WalletPage() {
   const [connectIntent, setConnectIntent] = useState<"keplr" | "ledger" | null>(null);
   const availableBalanceAmount = data?.balances.find((balance) => balance.denom === DESMOS_CHAIN.denom)?.amount ?? "0";
   const availableBalanceDisplay = formatFixedDsmFromMicro(availableBalanceAmount);
+  const visibleDelegations = data?.delegations.filter((delegation) => hasPositiveMicroAmount(delegation.amount)) ?? [];
   const claimableDelegations = data?.delegations.filter((delegation) => isPositiveDecimal(delegation.rewardAmount)) ?? [];
   const hasClaimableRewards = claimableDelegations.length > 0;
   const amountInput = amountDsm.trim();
@@ -376,10 +378,10 @@ export function WalletPage() {
                   </div>
                 </div>
                 <div className="mt-3 space-y-2">
-                  {data.delegations.length === 0 ? (
+                  {visibleDelegations.length === 0 ? (
                     <p className="text-sm text-slate-300">No active delegations.</p>
                   ) : (
-                    data.delegations.map((delegation) => (
+                    visibleDelegations.map((delegation) => (
                       <div
                         key={delegation.validatorAddress}
                         className="rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200"
