@@ -497,6 +497,25 @@ function resolveValidatorMonikerByConsensusAddress(
   return directory.byConsensusHexAddress.get(normalizeHexAddress(consensusAddress))?.moniker ?? "";
 }
 
+function resolveValidatorProfileByOperatorAddress(
+  directory: ValidatorDirectory | undefined,
+  operatorAddress: string
+): Pick<ValidatorRecord, "moniker" | "identity"> {
+  if (!directory || !operatorAddress) {
+    return {
+      moniker: "",
+      identity: ""
+    };
+  }
+
+  const validator = directory.byOperatorAddress.get(operatorAddress);
+
+  return {
+    moniker: validator?.moniker ?? "",
+    identity: validator?.identity ?? ""
+  };
+}
+
 function normalizeBlock(blockResponse: any, directory?: ValidatorDirectory) {
   const block = blockResponse?.result?.block ?? {};
   const proposerAddress = block?.header?.proposer_address ?? "";
@@ -952,9 +971,12 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
 
 async function getAccountDetails(env: Env, address: string) {
   const validatorDirectoryPromise = getValidatorDirectory(env);
-  const [balancesResponse, delegationsResponse, recentTransactions] = await Promise.all([
+  const [balancesResponse, delegationsResponse, unbondingDelegationsResponse, redelegationsResponse, recentTransactions] =
+    await Promise.all([
     fetchRestJson(env, `/cosmos/bank/v1beta1/balances/${address}`),
     fetchRestJson(env, `/cosmos/staking/v1beta1/delegations/${address}`),
+    fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/unbonding_delegations`),
+    fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/redelegations`),
     withTimeout(getRecentTransactionsForAccount(env, address, 12).catch(() => []), 5_000, [])
   ]);
   const validatorDirectory = await validatorDirectoryPromise;
@@ -973,6 +995,45 @@ async function getAccountDetails(env: Env, address: string) {
         validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.identity ?? "",
       amount: delegation?.balance?.amount ?? "0"
     })),
+    unbondingDelegations: (unbondingDelegationsResponse?.unbonding_responses ?? [])
+      .flatMap((unbondingDelegation: any) => {
+        const validatorAddress = unbondingDelegation?.validator_address ?? "";
+        const validatorProfile = resolveValidatorProfileByOperatorAddress(validatorDirectory, validatorAddress);
+
+        return (unbondingDelegation?.entries ?? []).map((entry: any) => ({
+          validatorAddress,
+          moniker: validatorProfile.moniker,
+          identity: validatorProfile.identity,
+          amount: entry?.balance ?? entry?.initial_balance ?? "0",
+          completionTime: entry?.completion_time ?? ""
+        }));
+      })
+      .sort((left: any, right: any) => (left.completionTime ?? "").localeCompare(right.completionTime ?? "")),
+    redelegations: (redelegationsResponse?.redelegation_responses ?? [])
+      .flatMap((redelegation: any) => {
+        const sourceValidatorAddress = redelegation?.redelegation?.validator_src_address ?? "";
+        const destinationValidatorAddress = redelegation?.redelegation?.validator_dst_address ?? "";
+        const sourceValidatorProfile = resolveValidatorProfileByOperatorAddress(
+          validatorDirectory,
+          sourceValidatorAddress
+        );
+        const destinationValidatorProfile = resolveValidatorProfileByOperatorAddress(
+          validatorDirectory,
+          destinationValidatorAddress
+        );
+
+        return (redelegation?.entries ?? []).map((entry: any) => ({
+          sourceValidatorAddress,
+          sourceMoniker: sourceValidatorProfile.moniker,
+          sourceIdentity: sourceValidatorProfile.identity,
+          destinationValidatorAddress,
+          destinationMoniker: destinationValidatorProfile.moniker,
+          destinationIdentity: destinationValidatorProfile.identity,
+          amount: entry?.balance ?? entry?.redelegation_entry?.initial_balance ?? "0",
+          completionTime: entry?.redelegation_entry?.completion_time ?? entry?.completion_time ?? ""
+        }));
+      })
+      .sort((left: any, right: any) => (left.completionTime ?? "").localeCompare(right.completionTime ?? "")),
     recentTransactions
   };
 }

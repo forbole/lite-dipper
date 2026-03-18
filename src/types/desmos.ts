@@ -181,5 +181,22 @@ export interface AccountDetailsPayload {
     identity?: string;
     amount: string;
   }>;
+  unbondingDelegations: Array<{
+    validatorAddress: string;
+    moniker?: string;
+    identity?: string;
+    amount: string;
+    completionTime: string;
+  }>;
+  redelegations: Array<{
+    sourceValidatorAddress: string;
+    sourceMoniker?: string;
+    sourceIdentity?: string;
+    destinationValidatorAddress: string;
+    destinationMoniker?: string;
+    destinationIdentity?: string;
+    amount: string;
+    completionTime: string;
+  }>;
   recentTransactions: TransactionSummary[];
 }

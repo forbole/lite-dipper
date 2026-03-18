@@ -72,6 +72,21 @@ export function formatFixedDsmFromMicro(value: string): string {
   return `${groupedIntegerPart}.${fractionPart} ${DESMOS_CHAIN.displayDenom}`;
 }
 
+export function sumMicroAmounts(values: Array<string | null | undefined>): string {
+  return values
+    .filter((value): value is string => typeof value === "string")
+    .reduce((sum, value) => {
+      const normalized = value.trim();
+
+      if (!/^\d+$/.test(normalized)) {
+        return sum;
+      }
+
+      return sum + BigInt(normalized);
+    }, 0n)
+    .toString();
+}
+
 export function isPositiveDecimal(value: string): boolean {
   const normalized = value.trim();
 
