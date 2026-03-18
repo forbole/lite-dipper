@@ -1,3 +1,5 @@
+import { botttsNeutral } from "@dicebear/collection";
+import { createAvatar } from "@dicebear/core";
 import { useState } from "react";
 
 interface ValidatorAvatarProps {
@@ -16,16 +18,26 @@ function buildAvatarEndpoint(identity: string): string {
   return `/api/keybase/avatar/${encodeURIComponent(identity)}`;
 }
 
+function buildFallbackAvatarDataUri(seed: string): string {
+  return createAvatar(botttsNeutral, {
+    seed,
+    backgroundType: ["solid"],
+    backgroundColor: ["1e293b", "0f172a", "155e75", "1d4ed8", "854d0e"]
+  }).toDataUri();
+}
+
 export function ValidatorAvatar({ identity, moniker, size = "md" }: ValidatorAvatarProps) {
   const [failed, setFailed] = useState(false);
-  const initials = moniker.trim().slice(0, 1).toUpperCase() || "?";
   const className = `${SIZE_CLASS_MAP[size]} shrink-0 border border-white/10 object-cover`;
 
   if (!identity || failed) {
     return (
-      <div className={`flex items-center justify-center bg-white/[0.05] text-slate-300 ${className}`}>
-        {initials}
-      </div>
+      <img
+        src={buildFallbackAvatarDataUri(identity || moniker || "?")}
+        alt={`${moniker} avatar`}
+        className={className}
+        loading="lazy"
+      />
     );
   }
 

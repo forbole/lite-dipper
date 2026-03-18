@@ -20,6 +20,8 @@
     "@cosmjs/ledger-amino": "^0.32.4",
     "@cosmjs/proto-signing": "^0.32.4",
     "@cosmjs/stargate": "^0.32.4",
+    "@dicebear/collection": "^9.4.0",
+    "@dicebear/core": "^9.4.0",
     "@ledgerhq/hw-transport-webhid": "^6.30.7",
     "cosmjs-types": "^0.9.0",
     "long": "^5.2.3",
