@@ -65,8 +65,10 @@ export function AppShell() {
   }, [location.hash, location.pathname, location.search]);
 
   return (
-    <div className="min-h-screen bg-app text-slate-100">
-      <div className="flex min-h-screen">
+    <div className="relative min-h-screen bg-app text-slate-100">
+      <GalaxyBackground />
+
+      <div className="relative z-10 flex min-h-screen">
         <aside
           className={[
             "border-r border-white/10 bg-slate-950/80 px-3 py-4 backdrop-blur transition-all duration-200",
@@ -131,8 +133,6 @@ export function AppShell() {
         </aside>
 
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
-          <GalaxyBackground />
-
           <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/55 px-5 py-4 backdrop-blur">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
