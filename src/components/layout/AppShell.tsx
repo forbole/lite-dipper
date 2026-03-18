@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { DESMOS_TOKEN_ICON_URL } from "../../config/chain";
+import { LAST_PATH_STORAGE_KEY } from "../../app/router";
 import { useWallet } from "../../wallet/WalletProvider";
 import { truncateMiddle } from "../../lib/format";
 import { GalaxyBackground } from "./GalaxyBackground";
@@ -47,6 +48,21 @@ export function AppShell() {
       localStorage.setItem("lite-dipper-sidebar", collapsed ? "collapsed" : "expanded");
     }
   }, [collapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(
+        LAST_PATH_STORAGE_KEY,
+        `${location.pathname}${location.search}${location.hash}`
+      );
+    } catch {
+      // Ignore storage failures and keep navigation working.
+    }
+  }, [location.hash, location.pathname, location.search]);
 
   return (
     <div className="min-h-screen bg-app text-slate-100">

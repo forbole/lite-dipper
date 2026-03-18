@@ -51,3 +51,11 @@ test("shows the disconnected wallet onboarding state", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Keplr/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Ledger/ })).toBeVisible();
 });
+
+test("loads the validators route directly from the location bar", async ({ page }) => {
+  await page.goto("/validators");
+
+  await expect(page).toHaveURL(/\/validators$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Validators", exact: true })).toBeVisible();
+  await expect(page.getByText("Apollo", { exact: true })).toBeVisible();
+});
