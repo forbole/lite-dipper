@@ -6,6 +6,18 @@ export interface WalletConnection {
   name: string;
 }
 
+export interface LedgerAddressOption {
+  address: string;
+  hdPath: string;
+  derivationIndex: number;
+}
+
+export interface LedgerSelectionState {
+  accountNumber: number;
+  page: number;
+  accounts: LedgerAddressOption[];
+}
+
 export interface SendDsmInput {
   recipient: string;
   amountDsm: string;

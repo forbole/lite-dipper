@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { MetricCard } from "../components/ui/MetricCard";
 import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
@@ -9,6 +10,7 @@ import {
   formatDateTime,
   formatFixedDsmFromMicro,
   formatNumber,
+  formatTimeRemaining,
   sumMicroAmounts,
   truncateMiddle
 } from "../lib/format";
@@ -68,7 +70,15 @@ export function AccountDetailsPage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="space-y-6">
-          <Panel title="Account Overview" subtitle={truncateMiddle(data.address, 18, 10)}>
+          <Panel
+            title="Account Overview"
+            subtitle={
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <span className="min-w-0 break-all">{data.address}</span>
+                <CopyIconButton value={data.address} />
+              </div>
+            }
+          >
             <div className="space-y-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Available Balances</p>
@@ -144,7 +154,9 @@ export function AccountDetailsPage() {
                         </div>
                         <div className="mt-3 flex flex-col gap-1 text-slate-300">
                           <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
-                          <p className="text-xs text-slate-400">Target end time: {formatDateTime(delegation.completionTime)}</p>
+                          <p className="text-xs text-slate-400">
+                            Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
+                          </p>
                         </div>
                       </div>
                     ))
@@ -210,7 +222,7 @@ export function AccountDetailsPage() {
                           <div className="flex flex-col gap-1 text-slate-300">
                             <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
                             <p className="text-xs text-slate-400">
-                              Target end time: {formatDateTime(delegation.completionTime)}
+                              Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
                             </p>
                           </div>
                         </div>

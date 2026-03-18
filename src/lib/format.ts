@@ -27,6 +27,44 @@ export function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
+export function formatTimeRemaining(value: string): string {
+  if (!value) {
+    return "N/A";
+  }
+
+  const target = new Date(value).getTime();
+
+  if (Number.isNaN(target)) {
+    return "N/A";
+  }
+
+  const remainingMs = target - Date.now();
+
+  if (remainingMs <= 0) {
+    return "Completed";
+  }
+
+  const totalMinutes = Math.floor(remainingMs / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+
+  if (hours > 0 || days > 0) {
+    parts.push(`${hours}h`);
+  }
+
+  if (days === 0) {
+    parts.push(`${minutes}m`);
+  }
+
+  return `${parts.join(" ")} remaining`;
+}
+
 export function truncateMiddle(value: string, start = 10, end = 8): string {
   if (!value || value.length <= start + end + 3) {
     return value || "N/A";

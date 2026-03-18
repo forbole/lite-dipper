@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type {
   DelegateInput,
   IbcTransferInput,
+  LedgerAddressOption,
+  LedgerSelectionState,
   ProposalVoteOption,
   RedelegateInput,
   SendDsmInput,
@@ -25,10 +27,17 @@ import { parseDsmToMicro } from "../lib/format";
 
 interface WalletContextValue {
   connection: WalletConnection | null;
+  ledgerSelection: LedgerSelectionState | null;
   connecting: boolean;
   error: string | null;
   connectKeplr: () => Promise<void>;
   connectLedger: () => Promise<void>;
+  connectLedgerAddress: (address: string) => Promise<void>;
+  nextLedgerAccount: () => Promise<void>;
+  previousLedgerAccount: () => Promise<void>;
+  nextLedgerPage: () => Promise<void>;
+  previousLedgerPage: () => Promise<void>;
+  cancelLedgerSelection: () => Promise<void>;
   disconnect: () => void;
   sendDsm: (input: SendDsmInput) => Promise<WalletTxResult>;
   delegate: (input: DelegateInput) => Promise<WalletTxResult>;
@@ -136,9 +145,60 @@ function mapProposalVoteOption(option: ProposalVoteOption): VoteOption {
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const signerRef = useRef<OfflineSigner | null>(null);
+  const ledgerTransportRef = useRef<any | null>(null);
+  const ledgerPreviewSignerRef = useRef<OfflineSigner | null>(null);
   const [connection, setConnection] = useState<WalletConnection | null>(null);
+  const [ledgerSelection, setLedgerSelection] = useState<LedgerSelectionState | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function closeLedgerTransport() {
+    ledgerPreviewSignerRef.current = null;
+
+    if (ledgerTransportRef.current && typeof ledgerTransportRef.current.close === "function") {
+      try {
+        await ledgerTransportRef.current.close();
+      } catch {
+        // Ignore close errors and let the next connection attempt recover.
+      }
+    }
+
+    ledgerTransportRef.current = null;
+  }
+
+  async function loadLedgerAccountsPage(accountNumber: number, page: number): Promise<LedgerSelectionState> {
+    const [{ LedgerSigner }, { stringToPath }, { default: TransportWebHID }] = await Promise.all([
+      import("@cosmjs/ledger-amino"),
+      import("@cosmjs/crypto"),
+      import("@ledgerhq/hw-transport-webhid")
+    ]);
+    const transport = ledgerTransportRef.current ?? (await TransportWebHID.create());
+    ledgerTransportRef.current = transport;
+
+    const accountsPerPage = 10;
+    const startIndex = page * accountsPerPage;
+    const hdPaths = Array.from({ length: accountsPerPage }, (_, offset) =>
+      stringToPath(`m/44'/${DESMOS_CHAIN.coinType}'/${accountNumber}'/0/${startIndex + offset}`)
+    );
+    const signer = new LedgerSigner(transport, {
+      hdPaths,
+      prefix: DESMOS_CHAIN.bech32Prefix,
+      ledgerAppName: DESMOS_CHAIN.chainName
+    });
+    const accounts = await signer.getAccounts();
+
+    ledgerPreviewSignerRef.current = signer;
+
+    return {
+      accountNumber,
+      page,
+      accounts: accounts.map((account, offset): LedgerAddressOption => ({
+        address: account.address,
+        hdPath: `m/44'/${DESMOS_CHAIN.coinType}'/${accountNumber}'/0/${startIndex + offset}`,
+        derivationIndex: startIndex + offset
+      }))
+    };
+  }
 
   async function connectKeplr() {
     try {
@@ -187,27 +247,38 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       setConnecting(true);
       setError(null);
+      setConnection(null);
+      const selection = await loadLedgerAccountsPage(0, 0);
+      setLedgerSelection(selection);
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Failed to connect Ledger.";
+      await closeLedgerTransport();
+      setLedgerSelection(null);
+      setError(message);
+      throw nextError;
+    } finally {
+      setConnecting(false);
+    }
+  }
 
-      const [{ LedgerSigner }, { stringToPath }, { default: TransportWebHID }] = await Promise.all([
-        import("@cosmjs/ledger-amino"),
-        import("@cosmjs/crypto"),
-        import("@ledgerhq/hw-transport-webhid")
-      ]);
+  async function connectLedgerAddress(address: string) {
+    try {
+      setConnecting(true);
+      setError(null);
 
-      const transport = await TransportWebHID.create();
-      const signer = new LedgerSigner(transport, {
-        hdPaths: [stringToPath(`m/44'/${DESMOS_CHAIN.coinType}'/0'/0/0`)],
-        prefix: DESMOS_CHAIN.bech32Prefix,
-        ledgerAppName: DESMOS_CHAIN.chainName
-      });
-      const [account] = await signer.getAccounts();
+      const selectedAccount = ledgerSelection?.accounts.find((account) => account.address === address);
 
-      signerRef.current = signer;
+      if (!selectedAccount || !ledgerPreviewSignerRef.current) {
+        throw new Error("Select a Ledger address before connecting.");
+      }
+
+      signerRef.current = ledgerPreviewSignerRef.current;
       setConnection({
         mode: "ledger",
-        address: account.address,
+        address: selectedAccount.address,
         name: "Ledger"
       });
+      setLedgerSelection(null);
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : "Failed to connect Ledger.";
       setError(message);
@@ -217,8 +288,89 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function nextLedgerPage() {
+    if (!ledgerSelection) {
+      return;
+    }
+
+    try {
+      setConnecting(true);
+      setError(null);
+      setLedgerSelection(await loadLedgerAccountsPage(ledgerSelection.accountNumber, ledgerSelection.page + 1));
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Failed to load the next Ledger addresses.";
+      setError(message);
+      throw nextError;
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function previousLedgerPage() {
+    if (!ledgerSelection || ledgerSelection.page === 0) {
+      return;
+    }
+
+    try {
+      setConnecting(true);
+      setError(null);
+      setLedgerSelection(await loadLedgerAccountsPage(ledgerSelection.accountNumber, ledgerSelection.page - 1));
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error ? nextError.message : "Failed to load the previous Ledger addresses.";
+      setError(message);
+      throw nextError;
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function nextLedgerAccount() {
+    if (!ledgerSelection) {
+      return;
+    }
+
+    try {
+      setConnecting(true);
+      setError(null);
+      setLedgerSelection(await loadLedgerAccountsPage(ledgerSelection.accountNumber + 1, 0));
+    } catch (nextError) {
+      const message = nextError instanceof Error ? nextError.message : "Failed to load the next Ledger account.";
+      setError(message);
+      throw nextError;
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function previousLedgerAccount() {
+    if (!ledgerSelection || ledgerSelection.accountNumber === 0) {
+      return;
+    }
+
+    try {
+      setConnecting(true);
+      setError(null);
+      setLedgerSelection(await loadLedgerAccountsPage(ledgerSelection.accountNumber - 1, 0));
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error ? nextError.message : "Failed to load the previous Ledger account.";
+      setError(message);
+      throw nextError;
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  async function cancelLedgerSelection() {
+    await closeLedgerTransport();
+    setLedgerSelection(null);
+  }
+
   function disconnect() {
     signerRef.current = null;
+    void closeLedgerTransport();
+    setLedgerSelection(null);
     setConnection(null);
     setError(null);
   }
@@ -429,10 +581,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     <WalletContext.Provider
       value={{
         connection,
+        ledgerSelection,
         connecting,
         error,
         connectKeplr,
         connectLedger,
+        connectLedgerAddress,
+        nextLedgerAccount,
+        previousLedgerAccount,
+        nextLedgerPage,
+        previousLedgerPage,
+        cancelLedgerSelection,
         disconnect,
         sendDsm,
         delegate,

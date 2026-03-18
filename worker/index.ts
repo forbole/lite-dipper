@@ -871,11 +871,14 @@ async function getProposalDetails(env: Env, proposalId: string) {
 
 async function getWalletOverview(env: Env, address: string) {
   const validatorDirectoryPromise = getValidatorDirectory(env);
-  const [balancesResponse, delegationsResponse, rewardsResponse] = await Promise.all([
-    fetchRestJson(env, `/cosmos/bank/v1beta1/balances/${address}`),
-    fetchRestJson(env, `/cosmos/staking/v1beta1/delegations/${address}`),
-    fetchRestJson(env, `/cosmos/distribution/v1beta1/delegators/${address}/rewards`)
-  ]);
+  const [balancesResponse, delegationsResponse, unbondingDelegationsResponse, redelegationsResponse, rewardsResponse] =
+    await Promise.all([
+      fetchRestJson(env, `/cosmos/bank/v1beta1/balances/${address}`),
+      fetchRestJson(env, `/cosmos/staking/v1beta1/delegations/${address}`),
+      fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/unbonding_delegations`),
+      fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/redelegations`),
+      fetchRestJson(env, `/cosmos/distribution/v1beta1/delegators/${address}/rewards`)
+    ]);
   const validatorDirectory = await validatorDirectoryPromise;
   const rewardsByValidator = new Map<string, string>(
     (rewardsResponse?.rewards ?? []).map((reward: any) => [
@@ -899,7 +902,46 @@ async function getWalletOverview(env: Env, address: string) {
         validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.identity ?? "",
       amount: delegation?.balance?.amount ?? "0",
       rewardAmount: rewardsByValidator.get(delegation?.delegation?.validator_address ?? "") ?? "0"
-    }))
+    })),
+    unbondingDelegations: (unbondingDelegationsResponse?.unbonding_responses ?? [])
+      .flatMap((unbondingDelegation: any) => {
+        const validatorAddress = unbondingDelegation?.validator_address ?? "";
+        const validatorProfile = resolveValidatorProfileByOperatorAddress(validatorDirectory, validatorAddress);
+
+        return (unbondingDelegation?.entries ?? []).map((entry: any) => ({
+          validatorAddress,
+          moniker: validatorProfile.moniker,
+          identity: validatorProfile.identity,
+          amount: entry?.balance ?? entry?.initial_balance ?? "0",
+          completionTime: entry?.completion_time ?? ""
+        }));
+      })
+      .sort((left: any, right: any) => (left.completionTime ?? "").localeCompare(right.completionTime ?? "")),
+    redelegations: (redelegationsResponse?.redelegation_responses ?? [])
+      .flatMap((redelegation: any) => {
+        const sourceValidatorAddress = redelegation?.redelegation?.validator_src_address ?? "";
+        const destinationValidatorAddress = redelegation?.redelegation?.validator_dst_address ?? "";
+        const sourceValidatorProfile = resolveValidatorProfileByOperatorAddress(
+          validatorDirectory,
+          sourceValidatorAddress
+        );
+        const destinationValidatorProfile = resolveValidatorProfileByOperatorAddress(
+          validatorDirectory,
+          destinationValidatorAddress
+        );
+
+        return (redelegation?.entries ?? []).map((entry: any) => ({
+          sourceValidatorAddress,
+          sourceMoniker: sourceValidatorProfile.moniker,
+          sourceIdentity: sourceValidatorProfile.identity,
+          destinationValidatorAddress,
+          destinationMoniker: destinationValidatorProfile.moniker,
+          destinationIdentity: destinationValidatorProfile.identity,
+          amount: entry?.balance ?? entry?.redelegation_entry?.initial_balance ?? "0",
+          completionTime: entry?.redelegation_entry?.completion_time ?? entry?.completion_time ?? ""
+        }));
+      })
+      .sort((left: any, right: any) => (left.completionTime ?? "").localeCompare(right.completionTime ?? ""))
   };
 }
 

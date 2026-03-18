@@ -167,6 +167,23 @@ export interface WalletOverviewPayload {
     amount: string;
     rewardAmount: string;
   }>;
+  unbondingDelegations: Array<{
+    validatorAddress: string;
+    moniker?: string;
+    identity?: string;
+    amount: string;
+    completionTime: string;
+  }>;
+  redelegations: Array<{
+    sourceValidatorAddress: string;
+    sourceMoniker?: string;
+    sourceIdentity?: string;
+    destinationValidatorAddress: string;
+    destinationMoniker?: string;
+    destinationIdentity?: string;
+    amount: string;
+    completionTime: string;
+  }>;
 }
 
 export interface AccountDetailsPayload {

@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { Panel } from "../components/ui/Panel";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { DESMOS_CHAIN } from "../config/chain";
 import { useApiResource } from "../hooks/useApiResource";
 import {
+  formatDateTime,
   formatFixedDsmFromMicro,
   formatFixedDsmFromMicroDecimal,
+  formatTimeRemaining,
   isPositiveDecimal,
   parseDsmToMicro,
   truncateMiddle
@@ -19,10 +22,17 @@ type WalletRoute = "native" | "ibc";
 export function WalletPage() {
   const {
     connection,
+    ledgerSelection,
     connecting,
     error,
     connectKeplr,
     connectLedger,
+    connectLedgerAddress,
+    nextLedgerAccount,
+    previousLedgerAccount,
+    nextLedgerPage,
+    previousLedgerPage,
+    cancelLedgerSelection,
     disconnect,
     sendDsm,
     withdrawAllRewards,
@@ -170,9 +180,103 @@ export function WalletPage() {
             className="rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(252,211,77,0.15),rgba(249,115,22,0.08))] p-5 text-left transition hover:border-amber-300/30 hover:bg-[linear-gradient(135deg,rgba(252,211,77,0.22),rgba(249,115,22,0.12))] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <p className="font-display text-xl text-white">Ledger</p>
-            <p className="mt-2 text-sm text-slate-300">Direct browser signing path. Use the Desmos app on the Ledger device.</p>
+            <p className="mt-2 text-sm text-slate-300">Direct browser signing path with account selection. Use the Desmos app on the Ledger device.</p>
           </button>
         </div>
+
+        {ledgerSelection ? (
+          <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/45 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-white">Choose a Ledger address</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Account {ledgerSelection.accountNumber} · page {ledgerSelection.page + 1} · showing 10 addresses
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={connecting || ledgerSelection.accountNumber === 0}
+                  onClick={() => {
+                    void previousLedgerAccount();
+                  }}
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Previous account
+                </button>
+                <button
+                  type="button"
+                  disabled={connecting}
+                  onClick={() => {
+                    void nextLedgerAccount();
+                  }}
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Next account
+                </button>
+                <button
+                  type="button"
+                  disabled={connecting || ledgerSelection.page === 0}
+                  onClick={() => {
+                    void previousLedgerPage();
+                  }}
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Previous 10
+                </button>
+                <button
+                  type="button"
+                  disabled={connecting}
+                  onClick={() => {
+                    void nextLedgerPage();
+                  }}
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Next 10
+                </button>
+                <button
+                  type="button"
+                  disabled={connecting}
+                  onClick={() => {
+                    void cancelLedgerSelection();
+                  }}
+                  className="inline-flex rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {ledgerSelection.accounts.map((account) => (
+                <div
+                  key={account.address}
+                  className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-3"
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+                        Address index {account.derivationIndex}
+                      </p>
+                      <p className="mt-2 break-all text-sm text-white">{account.address}</p>
+                      <p className="mt-1 text-xs text-slate-400">{account.hdPath}</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={connecting}
+                      onClick={() => {
+                        void connectLedgerAddress(account.address);
+                      }}
+                      className="inline-flex rounded-2xl border border-sky-300/20 bg-sky-400/10 px-3 py-2 text-sm text-sky-100 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Use this address
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {error ? <p className="mt-4 text-sm text-rose-200">{error}</p> : null}
       </Panel>
@@ -184,7 +288,10 @@ export function WalletPage() {
       <div className="flex flex-col gap-3 rounded-3xl border border-white/10 bg-slate-950/45 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <p className="text-sm text-slate-300">{connection.name} connected</p>
-          <p className="mt-1 text-white">{truncateMiddle(connection.address, 18, 10)}</p>
+          <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <p className="min-w-0 break-all text-white">{connection.address}</p>
+            <CopyIconButton value={connection.address} />
+          </div>
         </div>
         <button
           type="button"
@@ -197,7 +304,7 @@ export function WalletPage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-6">
-        <Panel title="Wallet Overview" subtitle="Balances and active delegations">
+        <Panel title="Wallet Overview" subtitle="Balances and staking positions">
           {connection && loading && !data ? <p className="text-sm text-slate-300">Loading wallet state…</p> : null}
           {connection && data ? (
             <div className="space-y-4">
@@ -298,6 +405,119 @@ export function WalletPage() {
                   </p>
                 ) : null}
                 {rewardError ? <p className="mt-4 text-sm text-rose-200">{rewardError}</p> : null}
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Delegations In Unbonding</p>
+                <div className="mt-3 space-y-2">
+                  {data.unbondingDelegations.length === 0 ? (
+                    <p className="text-sm text-slate-300">No unbonding delegations.</p>
+                  ) : (
+                    data.unbondingDelegations.map((delegation, index) => (
+                      <div
+                        key={`${delegation.validatorAddress}-${delegation.completionTime}-${delegation.amount}-${index}`}
+                        className="rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200"
+                      >
+                        <Link
+                          to={`/validators/${delegation.validatorAddress}`}
+                          className="block transition hover:text-white"
+                        >
+                          <div className="flex items-center gap-3">
+                            <ValidatorAvatar
+                              identity={delegation.identity}
+                              moniker={delegation.moniker || truncateMiddle(delegation.validatorAddress)}
+                              size="sm"
+                            />
+                            <div className="min-w-0">
+                              <div>{delegation.moniker || truncateMiddle(delegation.validatorAddress)}</div>
+                              <div className="mt-1 text-xs text-slate-500">{truncateMiddle(delegation.validatorAddress)}</div>
+                            </div>
+                          </div>
+                        </Link>
+                        <div className="mt-3 flex flex-col gap-1 text-slate-300">
+                          <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
+                          <p className="text-xs text-slate-400">
+                            Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Delegations Under Redelegation</p>
+                <div className="mt-3 space-y-2">
+                  {data.redelegations.length === 0 ? (
+                    <p className="text-sm text-slate-300">No redelegations in progress.</p>
+                  ) : (
+                    data.redelegations.map((delegation, index) => (
+                      <div
+                        key={[
+                          delegation.sourceValidatorAddress,
+                          delegation.destinationValidatorAddress,
+                          delegation.completionTime,
+                          delegation.amount,
+                          index
+                        ].join("-")}
+                        className="rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200"
+                      >
+                        <div className="space-y-3">
+                          <Link
+                            to={`/validators/${delegation.sourceValidatorAddress}`}
+                            className="block transition hover:text-white"
+                          >
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">From</p>
+                            <div className="mt-1 flex items-center gap-3">
+                              <ValidatorAvatar
+                                identity={delegation.sourceIdentity}
+                                moniker={delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <div>{delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}</div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {truncateMiddle(delegation.sourceValidatorAddress)}
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                          <Link
+                            to={`/validators/${delegation.destinationValidatorAddress}`}
+                            className="block transition hover:text-white"
+                          >
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">To</p>
+                            <div className="mt-1 flex items-center gap-3">
+                              <ValidatorAvatar
+                                identity={delegation.destinationIdentity}
+                                moniker={
+                                  delegation.destinationMoniker || truncateMiddle(delegation.destinationValidatorAddress)
+                                }
+                                size="sm"
+                              />
+                              <div className="min-w-0">
+                                <div>
+                                  {delegation.destinationMoniker ||
+                                    truncateMiddle(delegation.destinationValidatorAddress)}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                  {truncateMiddle(delegation.destinationValidatorAddress)}
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                          <div className="flex flex-col gap-1 text-slate-300">
+                            <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
+                            <p className="text-xs text-slate-400">
+                              Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           ) : null}
