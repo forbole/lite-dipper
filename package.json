@@ -16,14 +16,14 @@
     "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
-    "@cosmjs/crypto": "^0.32.4",
-    "@cosmjs/ledger-amino": "^0.32.4",
-    "@cosmjs/proto-signing": "^0.32.4",
-    "@cosmjs/stargate": "^0.32.4",
+    "@cosmjs/crypto": "^0.38.1",
+    "@cosmjs/ledger-amino": "^0.38.1",
+    "@cosmjs/proto-signing": "^0.38.1",
+    "@cosmjs/stargate": "^0.38.1",
     "@dicebear/collection": "^9.4.0",
     "@dicebear/core": "^9.4.1",
     "@ledgerhq/hw-transport-webhid": "^6.30.7",
-    "cosmjs-types": "^0.9.0",
+    "cosmjs-types": "^0.11.0",
     "long": "^5.2.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -41,7 +41,6 @@
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.3",
     "vite": "^6.2.0",
-    "vite-plugin-node-polyfills": "^0.25.0",
     "wrangler": "^4.7.0"
   }
 }
