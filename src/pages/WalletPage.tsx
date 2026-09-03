@@ -211,8 +211,9 @@ export function WalletPage() {
         </div>
 
         {connectIntent === "ledger" && connecting ? (
-          <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            Loading Ledger addresses. This can take a few seconds while the app talks to your device.
+          <div role="status" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            <span aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" />
+            <span>Loading Ledger addresses. This can take a few seconds while the app talks to your device.</span>
           </div>
         ) : null}
 
@@ -630,8 +631,10 @@ export function WalletPage() {
           <button
             type="submit"
             disabled={submitting || Boolean(amountValidationError)}
-            className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-busy={submitting}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
           >
+            {submitting ? <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" /> : null}
             {submitting ? "Submitting…" : route === "native" ? "Sign transfer" : "Sign IBC transfer"}
           </button>
         </form>
