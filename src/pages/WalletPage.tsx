@@ -4,7 +4,7 @@ import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { Panel } from "../components/ui/Panel";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { DESMOS_CHAIN } from "../config/chain";
-import { useApiResource } from "../hooks/useApiResource";
+import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
   formatDateTime,
   formatFixedDsmFromMicro,
@@ -15,7 +15,6 @@ import {
   parseDsmToMicro,
   truncateMiddle
 } from "../lib/format";
-import type { WalletOverviewPayload } from "../types/desmos";
 import { useWallet } from "../wallet/WalletProvider";
 
 type WalletRoute = "native" | "ibc";
@@ -40,13 +39,7 @@ export function WalletPage() {
     withdrawRewards,
     transferToOsmosis
   } = useWallet();
-  const { data, loading, refresh } = useApiResource<WalletOverviewPayload>(
-    connection ? `/api/wallet/${connection.address}/overview` : "/api/config",
-    {
-      enabled: Boolean(connection),
-      pollMs: 20_000
-    }
-  );
+  const { data, loading, error: overviewError, refresh } = useWalletOverview(connection?.address);
   const [route, setRoute] = useState<WalletRoute>("native");
   const [recipient, setRecipient] = useState("");
   const [amountDsm, setAmountDsm] = useState("");
@@ -218,8 +211,9 @@ export function WalletPage() {
         </div>
 
         {connectIntent === "ledger" && connecting ? (
-          <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-            Loading Ledger addresses. This can take a few seconds while the app talks to your device.
+          <div role="status" className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+            <span aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" />
+            <span>Loading Ledger addresses. This can take a few seconds while the app talks to your device.</span>
           </div>
         ) : null}
 
@@ -344,6 +338,14 @@ export function WalletPage() {
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-6">
         <Panel title="Wallet Overview" subtitle="Balances and staking positions">
+          {overviewError ? (
+            <div role="alert" className="mb-4 text-sm text-amber-200">
+              <p>{data ? "Unable to refresh wallet balances and rewards. Displayed amounts may be out of date." : "Unable to load wallet balances and rewards."}</p>
+              <button type="button" onClick={refresh} disabled={loading} className="mt-2 underline disabled:opacity-60">
+                Retry wallet refresh
+              </button>
+            </div>
+          ) : null}
           {connection && loading && !data ? <p className="text-sm text-slate-300">Loading wallet state…</p> : null}
           {connection && data ? (
             <div className="space-y-4">
@@ -629,8 +631,10 @@ export function WalletPage() {
           <button
             type="submit"
             disabled={submitting || Boolean(amountValidationError)}
-            className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-busy={submitting}
+            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
           >
+            {submitting ? <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" /> : null}
             {submitting ? "Submitting…" : route === "native" ? "Sign transfer" : "Sign IBC transfer"}
           </button>
         </form>

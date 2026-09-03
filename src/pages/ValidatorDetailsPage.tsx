@@ -4,6 +4,7 @@ import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { useApiResource } from "../hooks/useApiResource";
+import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
   formatBondStatus,
   formatDateTime,
@@ -14,7 +15,7 @@ import {
   parseDsmToMicro,
   truncateMiddle
 } from "../lib/format";
-import type { ValidatorDetailsPayload, ValidatorSummary, WalletOverviewPayload } from "../types/desmos";
+import type { ValidatorDetailsPayload, ValidatorSummary } from "../types/desmos";
 import { useWallet } from "../wallet/WalletProvider";
 import { useParams } from "react-router-dom";
 
@@ -34,14 +35,9 @@ export function ValidatorDetailsPage() {
   const {
     data: walletOverview,
     loading: walletOverviewLoading,
+    error: walletOverviewError,
     refresh: refreshWalletOverview
-  } = useApiResource<WalletOverviewPayload>(
-    connection ? `/api/wallet/${connection.address}/overview` : "/api/config",
-    {
-      enabled: Boolean(connection),
-      pollMs: 20_000
-    }
-  );
+  } = useWalletOverview(connection?.address);
   const {
     data: validatorOptions,
     loading: validatorOptionsLoading
@@ -308,6 +304,14 @@ export function ValidatorDetailsPage() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
               <p className="text-sm text-slate-400">Wallet Delegation</p>
+              {walletOverviewError ? (
+                <div role="alert" className="mt-2 text-amber-200">
+                  <p>Unable to refresh wallet balances and delegations. Displayed amounts may be out of date.</p>
+                  <button type="button" onClick={refreshWalletOverview} disabled={walletOverviewLoading} className="mt-2 underline disabled:opacity-60">
+                    Retry wallet refresh
+                  </button>
+                </div>
+              ) : null}
               {walletOverviewLoading && !walletOverview ? (
                 <p className="mt-2">Loading connected wallet delegation…</p>
               ) : hasCurrentDelegation ? (
@@ -400,8 +404,10 @@ export function ValidatorDetailsPage() {
                 (action === "redelegate" && redelegationDestinations.length === 0) ||
                 Boolean(amountValidationError)
               }
-              className="inline-flex items-center justify-center rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-busy={submitting}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,rgba(14,165,233,0.95),rgba(252,211,77,0.9))] px-4 py-3 font-medium text-slate-950 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
             >
+              {submitting ? <span aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" /> : null}
               {submitting ? "Submitting…" : `Sign ${action}`}
             </button>
           </form>

@@ -1,5 +1,6 @@
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string, options?: Pick<RequestInit, "cache">): Promise<T> {
   const response = await fetch(path, {
+    cache: options?.cache,
     headers: {
       Accept: "application/json"
     }
