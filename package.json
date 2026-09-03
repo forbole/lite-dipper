@@ -30,6 +30,7 @@
     "@dicebear/collection": "^9.4.0",
     "@dicebear/core": "^9.4.1",
     "@ledgerhq/hw-transport-webhid": "^6.30.7",
+    "buffer": "6.0.3",
     "cosmjs-types": "^0.11.0",
     "long": "^5.2.3",
     "react": "^19.0.0",

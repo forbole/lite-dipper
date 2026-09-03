@@ -167,6 +167,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }
 
   async function loadLedgerAccountsPage(accountNumber: number, page: number): Promise<LedgerSelectionState> {
+    await import("./ledgerBuffer");
     const [{ LedgerSigner }, { stringToPath }, { default: TransportWebHID }] = await Promise.all([
       import("@cosmjs/ledger-amino"),
       import("@cosmjs/crypto"),
