@@ -1,50 +1,10 @@
 import { Panel } from "../components/ui/Panel";
+import { CollapsibleJson } from "../components/ui/CollapsibleJson";
 import { StatusPill } from "../components/ui/StatusPill";
 import { useApiResource } from "../hooks/useApiResource";
 import { annotateUdsmAmounts, formatDateTime, formatMessageType, formatNumber, truncateMiddle } from "../lib/format";
 import type { TransactionDetailsPayload } from "../types/desmos";
 import { useParams } from "react-router-dom";
-
-function EventList({
-  events
-}: {
-  events: Array<{
-    type: string;
-    attributes: Array<{
-      key: string;
-      value: string;
-    }>;
-  }>;
-}) {
-  if (events.length === 0) {
-    return <p className="text-sm text-slate-300">No events returned.</p>;
-  }
-
-  return (
-    <div className="space-y-3">
-      {events.map((event, index) => (
-        <div key={`${event.type}-${index}`} className="rounded-2xl border border-white/[0.08] bg-slate-950/45 p-4">
-          <p className="text-sm text-white">{event.type}</p>
-          {event.attributes.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-400">No attributes.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {event.attributes.map((attribute, attributeIndex) => (
-                <div
-                  key={`${attribute.key}-${attribute.value}-${attributeIndex}`}
-                  className="grid gap-1 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs md:grid-cols-[180px_1fr]"
-                >
-                  <span className="text-slate-400">{attribute.key || "key"}</span>
-                  <span className="break-all text-slate-200">{annotateUdsmAmounts(attribute.value || "value")}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function TransactionDetailsPage() {
   const { hash } = useParams();
@@ -110,28 +70,20 @@ export function TransactionDetailsPage() {
         </pre>
       </Panel>
 
-      <Panel title="Message Logs" subtitle="Per-message logs and events emitted during execution">
+      <Panel title="Message Logs" subtitle={`${formatNumber(data.logs.length)} message ${data.logs.length === 1 ? "log" : "logs"} · Expand JSON to inspect execution details`}>
         {data.logs.length === 0 ? (
           <p className="text-sm text-slate-300">No structured message logs returned.</p>
         ) : (
-          <div className="space-y-4">
-            {data.logs.map((log) => (
-              <div key={log.msgIndex} className="rounded-2xl border border-white/[0.08] bg-slate-950/45 p-4">
-                <p className="text-sm text-white">Message #{log.msgIndex}</p>
-                {log.log ? (
-                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-slate-300">{annotateUdsmAmounts(log.log)}</pre>
-                ) : null}
-                <div className="mt-4">
-                  <EventList events={log.events} />
-                </div>
-              </div>
-            ))}
-          </div>
+          <CollapsibleJson key={data.hash} value={data.logs} label="Message logs JSON" />
         )}
       </Panel>
 
-      <Panel title="Transaction Events" subtitle="Top-level events emitted by the transaction response">
-        <EventList events={data.events} />
+      <Panel title="Transaction Events" subtitle={`${formatNumber(data.events.length)} ${data.events.length === 1 ? "event" : "events"} · Expand JSON to inspect transaction events`}>
+        {data.events.length === 0 ? (
+          <p className="text-sm text-slate-300">No events returned.</p>
+        ) : (
+          <CollapsibleJson key={data.hash} value={data.events} label="Transaction events JSON" />
+        )}
       </Panel>
 
       <Panel title="Signers" subtitle="Addresses found in the transaction signer list">

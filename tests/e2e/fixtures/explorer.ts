@@ -35,6 +35,7 @@ type ProfileApi = {
   serveDocuments: boolean;
   unavailable: boolean;
   rpcError?: boolean;
+  transaction?: unknown;
   latestHeight: number;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   profile: unknown;
@@ -72,7 +73,7 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       if (url.pathname.startsWith("/cosmos/gov/v1/proposals/")) return Response.json({ error: "Not found" }, { status: 404 });
       if (url.pathname.startsWith("/cosmos/tx/v1beta1/txs/")) {
         if (!url.pathname.endsWith(TX_HASH)) return Response.json({ error: "Not found" }, { status: 404 });
-        return Response.json({ tx: { body: { memo: "Community transfer", messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend", from_address: ACCOUNT, to_address: INACTIVE_ACCOUNT, amount: [{ denom: "udsm", amount: "1000000" }] }] }, auth_info: { fee: { amount: [] } } },
+        return Response.json(state.transaction ?? { tx: { body: { memo: "Community transfer", messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend", from_address: ACCOUNT, to_address: INACTIVE_ACCOUNT, amount: [{ denom: "udsm", amount: "1000000" }] }] }, auth_info: { fee: { amount: [] } } },
           tx_response: { txhash: TX_HASH, height: "3", timestamp: "2026-09-03T12:00:00Z", code: 0, gas_used: "80000", gas_wanted: "100000", logs: [], events: [] } });
       }
       if (url.pathname === "/cosmos/staking/v1beta1/validators") return Response.json({ validators: [STAKING_VALIDATOR] });
