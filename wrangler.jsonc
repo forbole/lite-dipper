@@ -6,9 +6,9 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
+    "not_found_handling": "none",
     "html_handling": "none",
-    "run_worker_first": ["/api/*", "/rpc", "/rpc/*"]
+    "run_worker_first": true
   },
   "routes": [
     {

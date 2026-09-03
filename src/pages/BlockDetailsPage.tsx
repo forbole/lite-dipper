@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { Panel } from "../components/ui/Panel";
-import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
+import { ValidatorIdentity } from "../components/ui/ValidatorIdentity";
 import { useApiResource } from "../hooks/useApiResource";
 import { formatDateTime, formatNumber, truncateMiddle } from "../lib/format";
 import type { BlockDetailsPayload } from "../types/desmos";
@@ -51,18 +51,14 @@ export function BlockDetailsPage() {
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/45 p-4">
           <p className="text-sm text-slate-400">Proposer</p>
-          <div className="mt-2 flex items-center gap-3">
-            <ValidatorAvatar
-              identity={data.block.proposerIdentity}
-              moniker={data.block.proposerMoniker || truncateMiddle(data.block.proposerAddress)}
-            />
-            <div>
-              <p className="text-white">{data.block.proposerMoniker || truncateMiddle(data.block.proposerAddress)}</p>
-              {data.block.proposerMoniker ? (
-                <p className="mt-1 text-xs text-slate-500">{truncateMiddle(data.block.proposerAddress)}</p>
-              ) : null}
-            </div>
-          </div>
+          <ValidatorIdentity
+            operatorAddress={data.block.proposerOperatorAddress ?? ""}
+            displayAddress={data.block.proposerAddress}
+            identity={data.block.proposerIdentity}
+            moniker={data.block.proposerMoniker}
+            size="md"
+            className="mt-2"
+          />
         </div>
       </Panel>
 
@@ -77,13 +73,13 @@ export function BlockDetailsPage() {
             {data.signedValidators.map((validator) => {
               const content = (
                 <div className="rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 transition hover:border-sky-300/30 hover:bg-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <ValidatorAvatar identity={validator.identity} moniker={validator.moniker} />
-                    <div>
-                      <p className="text-sm text-white">{validator.moniker}</p>
-                      <p className="mt-1 text-xs text-slate-500">{truncateMiddle(validator.consensusAddress)}</p>
-                    </div>
-                  </div>
+                  <ValidatorIdentity
+                    operatorAddress={validator.operatorAddress}
+                    displayAddress={validator.consensusAddress}
+                    identity={validator.identity}
+                    moniker={validator.moniker}
+                    size="md"
+                  />
                   <p className="mt-2 text-xs text-slate-400">{formatDateTime(validator.timestamp)}</p>
                 </div>
               );

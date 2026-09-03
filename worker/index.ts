@@ -1,6 +1,10 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import type { DesmosProfile } from "../src/types/desmos";
+import { HttpError } from "../src/lib/httpError";
+import { getProposals, getProposalDetails } from "../src/lib/governance";
+import { resolvePage, type PageRoute, type PageSnapshot } from "../src/seo/page";
+import { renderDocument, renderSitemap } from "./seo";
 
 interface Env {
   ASSETS: Fetcher;
@@ -286,10 +290,10 @@ async function withCache(
 }
 
 async function fetchJson(url: URL | string, init?: RequestInit) {
-  const response = await fetch(url, init);
+  const response = await fetch(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(8_000) });
 
   if (!response.ok) {
-    throw new Error(`Upstream ${response.status}: ${await response.text()}`);
+    throw new HttpError(response.status, `Upstream ${response.status}: ${await response.text()}`);
   }
 
   return response.json<any>();
@@ -302,7 +306,11 @@ async function fetchRpcJson(env: Env, path: string, search?: Record<string, stri
     url.searchParams.set(key, value);
   });
 
-  return fetchJson(url);
+  const response = await fetchJson(url);
+  // Tendermint can report an RPC failure in a successful HTTP response.
+  // Do not turn that into an empty, indexable block or transaction listing.
+  if (response?.error) throw new HttpError(503, "Desmos RPC data is temporarily unavailable.");
+  return response;
 }
 
 async function fetchRestJson(env: Env, path: string, search?: Array<[string, string]>, init?: RequestInit) {
@@ -492,17 +500,6 @@ function extractFeeAmount(tx: any): string {
   return total.toString();
 }
 
-function resolveValidatorMonikerByConsensusAddress(
-  directory: ValidatorDirectory | undefined,
-  consensusAddress: string
-): string {
-  if (!directory || !consensusAddress) {
-    return "";
-  }
-
-  return directory.byConsensusHexAddress.get(normalizeHexAddress(consensusAddress))?.moniker ?? "";
-}
-
 function resolveValidatorProfileByOperatorAddress(
   directory: ValidatorDirectory | undefined,
   operatorAddress: string
@@ -525,15 +522,16 @@ function resolveValidatorProfileByOperatorAddress(
 function normalizeBlock(blockResponse: any, directory?: ValidatorDirectory) {
   const block = blockResponse?.result?.block ?? {};
   const proposerAddress = block?.header?.proposer_address ?? "";
+  const proposer = directory?.byConsensusHexAddress.get(normalizeHexAddress(proposerAddress));
 
   return {
     height: Number(block?.header?.height ?? 0),
     hash: blockResponse?.result?.block_id?.hash ?? "",
     time: block?.header?.time ?? "",
     proposerAddress,
-    proposerMoniker: resolveValidatorMonikerByConsensusAddress(directory, proposerAddress),
-    proposerIdentity:
-      directory?.byConsensusHexAddress.get(normalizeHexAddress(proposerAddress))?.identity ?? "",
+    proposerOperatorAddress: proposer?.operatorAddress ?? "",
+    proposerMoniker: proposer?.moniker ?? "",
+    proposerIdentity: proposer?.identity ?? "",
     txCount: Array.isArray(block?.data?.txs) ? block.data.txs.length : 0
   };
 }
@@ -594,12 +592,15 @@ function normalizeEvent(event: any) {
 
 async function getLatestHeight(env: Env): Promise<number> {
   const status = await fetchRpcJson(env, "/status");
-  return Number(status?.result?.sync_info?.latest_block_height ?? 0);
+  const height = Number(status?.result?.sync_info?.latest_block_height);
+  if (!Number.isSafeInteger(height) || height < 1) throw new HttpError(503, "Desmos RPC returned an invalid block height.");
+  return height;
 }
 
-async function getRecentBlocks(env: Env, limit: number, directory?: ValidatorDirectory) {
+async function getRecentBlocks(env: Env, limit: number, directory?: ValidatorDirectory, before?: number) {
   const latestHeight = await getLatestHeight(env);
-  const heights = Array.from({ length: Math.min(limit, latestHeight) }, (_, index) => latestHeight - index);
+  const startHeight = before ? Math.min(before - 1, latestHeight) : latestHeight;
+  const heights = Array.from({ length: Math.min(limit, startHeight) }, (_, index) => startHeight - index);
   const blocks = await Promise.all(
     heights.map((height) => fetchRpcJson(env, "/block", { height: String(height) }))
   );
@@ -757,17 +758,24 @@ function profilePictureUrl(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) return "";
   try {
     const url = new URL(value);
-    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return "";
+    // Older profiles still reference Cloudflare's retired public IPFS gateways.
+    // Resolve the same immutable CID and path through the Desmos gateway.
+    if (["cloudflare-ipfs.com", "cf-ipfs.com"].includes(url.hostname) && url.pathname.startsWith("/ipfs/")) {
+      url.protocol = "https:";
+      url.host = "ipfs.desmos.network";
+    }
+    return url.href;
   } catch {
     return "";
   }
 }
 
-async function fetchDesmosProfile(env: Env, address: string): Promise<DesmosProfile | null> {
+async function fetchDesmosProfile(env: Env, address: string, timeoutMs = 5_000): Promise<DesmosProfile | null> {
   if (!address) return null;
   try {
     const response = await fetchRestJson(env, `/desmos/profiles/v3/profiles/${encodeURIComponent(address)}`, undefined, {
-      signal: AbortSignal.timeout(5_000)
+      signal: AbortSignal.timeout(timeoutMs)
     });
     const profile = response?.profile;
     const account = profile?.account;
@@ -1053,8 +1061,10 @@ async function handleApi(request: Request, env: Env) {
   }
 
   if (url.pathname === "/api/blocks") {
-    const limit = Number(url.searchParams.get("limit") ?? "20");
-    return json(await getRecentBlocks(env, limit, await getValidatorDirectory(env)));
+    const limit = Math.max(1, Math.min(50, Number(url.searchParams.get("limit") ?? "20") || 20));
+    const before = url.searchParams.has("before") ? Number(url.searchParams.get("before")) : undefined;
+    if (before !== undefined && (!Number.isSafeInteger(before) || before <= 1)) return json({ error: "Invalid block height." }, { status: 400 });
+    return json(await getRecentBlocks(env, limit, await getValidatorDirectory(env), before));
   }
 
   if (segments[0] === "api" && segments[1] === "blocks" && segments[2]) {
@@ -1072,6 +1082,18 @@ async function handleApi(request: Request, env: Env) {
 
   if (url.pathname === "/api/validators") {
     return json(await getValidators(env));
+  }
+
+  if (segments[0] === "api" && segments[1] === "validators" && segments[3] === "profile" && segments.length === 4) {
+    let accountAddress: string;
+    try {
+      if (!segments[2].startsWith("desmosvaloper1")) throw new Error("Invalid validator prefix.");
+      accountAddress = deriveAccountAddressFromOperatorAddress(segments[2]);
+    } catch {
+      return json({ error: "Invalid validator address." }, { status: 400 });
+    }
+    // Query by account even when a validator is no longer in the bonded set.
+    return json(await fetchDesmosProfile(env, accountAddress));
   }
 
   if (segments[0] === "api" && segments[1] === "validators" && segments[2]) {
@@ -1114,21 +1136,103 @@ async function handleRpcProxy(request: Request, env: Env) {
   return fetch(upstreamRequest);
 }
 
-async function handleAssetOrSpa(request: Request, env: Env) {
-  const assetResponse = await env.ASSETS.fetch(request);
-
-  if (assetResponse.status !== 404) {
-    return assetResponse;
+async function loadPublicPage(env: Env, route: PageRoute): Promise<PageSnapshot> {
+  const snapshot: PageSnapshot = { path: route.path, resources: {}, status: 200 };
+  if (route.kind === "notfound") return { ...snapshot, status: 404 };
+  if (route.kind === "wallet") return snapshot;
+  try {
+    let data: unknown;
+    switch (route.kind) {
+      case "home": data = await getDashboard(env); break;
+      case "validators": data = await getValidators(env); break;
+      case "validator": {
+        try { deriveAccountAddressFromOperatorAddress(route.id!); } catch { throw new HttpError(404, "Validator not found."); }
+        data = await getValidatorDetails(env, route.id!); break;
+      }
+      case "blocks": data = await getRecentBlocks(env, 20, await getValidatorDirectory(env), route.before); break;
+      case "block": {
+        if (Number(route.id) > await getLatestHeight(env)) throw new HttpError(404, "Block not found.");
+        data = await getBlockDetails(env, route.id!); break;
+      }
+      case "transactions": data = await getRecentTransactions(env, 20); break;
+      case "transaction": data = await getTransactionDetails(env, route.id!); break;
+      case "proposals": data = await getProposals(undefined, env.DESMOS_REST_URL); break;
+      case "proposal": data = await getProposalDetails(route.id!, env.DESMOS_REST_URL); break;
+      case "account": {
+        try { decodeBech32(route.id!); } catch { throw new HttpError(404, "Account not found."); }
+        data = await getAccountDetails(env, route.id!); break;
+      }
+    }
+    snapshot.resources[route.key] = data;
+    if (route.kind === "validator") {
+      const details = data as Awaited<ReturnType<typeof getValidatorDetails>>;
+      snapshot.resources[`/api/validators/${route.id}/profile`] = details.desmosProfile;
+    }
+    // Include a bounded set of optional identities in the initial HTML. The
+    // browser refreshes profiles separately after hydration, as before.
+    const addresses = new Set<string>();
+    function collect(value: unknown) {
+      if (!value || typeof value !== "object") return;
+      for (const [key, child] of Object.entries(value)) {
+        if (["operatorAddress", "proposerOperatorAddress", "validatorAddress", "sourceValidatorAddress", "destinationValidatorAddress"].includes(key) &&
+          typeof child === "string" && child.startsWith("desmosvaloper1")) addresses.add(child);
+        else if (typeof child === "object") collect(child);
+      }
+    }
+    collect(data);
+    await Promise.all([...addresses].slice(0, 20).map(async (operator) => {
+        const key = `/api/validators/${operator}/profile`;
+        if (key in snapshot.resources) return;
+        try {
+          snapshot.resources[key] = await fetchDesmosProfile(env, deriveAccountAddressFromOperatorAddress(operator), 1_500);
+        } catch { snapshot.resources[key] = null; }
+    }));
+    return snapshot;
+  } catch (error) {
+    const detailPage = ["validator", "block", "transaction", "proposal", "account"].includes(route.kind);
+    const status = detailPage && error instanceof HttpError && [400, 404].includes(error.status) ? 404 : 503;
+    return { path: route.path, resources: {}, status, errors: route.key ? { [route.key]: {
+      status, message: status === 404 ? "The requested item was not found." : "Desmos data is temporarily unavailable. Please try again shortly."
+    } } : {} };
   }
+}
 
-  const accept = request.headers.get("accept") ?? "";
+async function loadSitemap(env: Env) {
+  const paths: Array<{ path: string; modified?: string }> = ["/", "/validators", "/blocks", "/transactions", "/proposals"].map((path) => ({ path }));
+  const results = await Promise.allSettled([
+    getValidators(env), getProposals(undefined, env.DESMOS_REST_URL),
+    getRecentBlocks(env, 20), getRecentTransactions(env, 20)
+  ]);
+  const [validators, proposals, blocks, transactions] = results;
+  if (validators.status === "fulfilled") paths.push(...validators.value.map((v) => ({ path: `/validators/${v.operatorAddress}` })));
+  if (proposals.status === "fulfilled") paths.push(...proposals.value.map((p) => ({ path: `/proposals/${p.id}` })));
+  if (blocks.status === "fulfilled") paths.push(...blocks.value.map((b) => ({ path: `/blocks/${b.height}`, modified: b.time })));
+  if (transactions.status === "fulfilled") paths.push(...transactions.value.map((tx) => ({ path: `/transactions/${tx.hash}`, modified: tx.timestamp })));
+  return new Response(renderSitemap(paths), { headers: { "content-type": "application/xml; charset=utf-8" } });
+}
 
-  if (accept.includes("text/html")) {
-    const indexRequest = new Request(new URL("/index.html", request.url).toString(), request);
-    return env.ASSETS.fetch(indexRequest);
+async function handleDocument(request: Request, env: Env, ctx: ExecutionContext) {
+  const url = new URL(request.url);
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed.", { status: 405, headers: { Allow: "GET, HEAD" } });
+  if (url.pathname === "/sitemap.xml") {
+    const response = await withCache(request, ctx, 300, () => loadSitemap(env));
+    return request.method === "HEAD" ? new Response(null, response) : response;
   }
-
-  return assetResponse;
+  if (url.pathname === "/index.html") return Response.redirect(new URL("/", url), 308);
+  if (url.pathname.startsWith("/assets/") || /\.[a-z0-9]+$/i.test(url.pathname)) return env.ASSETS.fetch(request);
+  const route = resolvePage(url.pathname + url.search);
+  if (route.kind !== "notfound" && url.pathname !== route.path.split("?")[0]) {
+    const destination = new URL(route.path, url.origin);
+    return Response.redirect(destination, 308);
+  }
+  const cacheRequest = new Request(new URL(route.path, url.origin), request);
+  return withCache(cacheRequest, ctx, ["wallet", "notfound"].includes(route.kind) ? 0 : 30, async () => {
+    const snapshot = await withTimeout(loadPublicPage(env, route), 10_000, {
+      path: route.path, resources: {}, status: 503,
+      errors: { [route.key]: { status: 503, message: "Desmos data is temporarily unavailable. Please try again shortly." } }
+    });
+    return renderDocument(request, env.ASSETS, snapshot);
+  });
 }
 
 export default {
@@ -1141,16 +1245,20 @@ export default {
       }
 
       if (url.pathname.startsWith("/api/")) {
-        return await withCache(request, ctx, getCacheTtl(url.pathname), () => handleApi(request, env));
+        const response = await withCache(request, ctx, getCacheTtl(url.pathname), () => handleApi(request, env));
+        const headers = new Headers(response.headers);
+        headers.set("x-robots-tag", "noindex");
+        return new Response(response.body, { status: response.status, headers });
       }
 
-      return handleAssetOrSpa(request, env);
+      return await handleDocument(request, env, ctx);
     } catch (error) {
       return json(
         {
           error: error instanceof Error ? error.message : "Unexpected worker error."
         },
-        { status: 500 }
+        { status: error instanceof HttpError && error.status === 404 ? 404 : 502,
+          headers: { "x-robots-tag": "noindex", "cache-control": "no-store" } }
       );
     }
   }

@@ -7,7 +7,7 @@ import { formatDateTime, formatPreciseDsmFromMicro, formatProposalStatus } from 
 import { getProposalDetails, tallyPercentage } from "../lib/governance";
 import type { ProposalDetailsPayload } from "../types/desmos";
 import type { ProposalVoteOption } from "../wallet/types";
-import { useWallet } from "../wallet/WalletProvider";
+import { useWallet } from "../wallet/context";
 import { useParams } from "react-router-dom";
 
 export function ProposalDetailsPage() {

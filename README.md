@@ -7,7 +7,7 @@ Lite-Dipper is a lightweight frontend-first Desmos explorer built with React, Vi
 - React + TypeScript + Vite
 - Tailwind CSS
 - React Router
-- Cloudflare Worker for API aggregation, caching and RPC proxying
+- Cloudflare Worker for public-page rendering, API aggregation, caching and RPC proxying
 - Keplr and Ledger wallet abstractions
 
 ## Desmos Defaults
@@ -25,7 +25,7 @@ The `DESMOS_GRPC_URL` variable is included in the config, but the current scaffo
 ## Scripts
 
 - `pnpm dev`: run the Vite frontend
-- `pnpm build`: typecheck and build the SPA
+- `pnpm build`: typecheck and build the browser assets
 - `pnpm preview`: build and serve the frontend, Worker API and RPC proxy at `http://127.0.0.1:4173` using live Desmos data
 - `pnpm test:e2e`: build the SPA and run Playwright smoke tests
 - `pnpm test:e2e:headed`: run the same E2E suite in headed mode
@@ -36,7 +36,7 @@ Use `pnpm preview` to review the app locally with live validators, profiles and 
 
 ## E2E Testing
 
-The SPA now includes a Playwright smoke suite under `tests/e2e`.
+The app includes a Playwright regression suite under `tests/e2e`.
 
 Run it locally with:
 
@@ -45,11 +45,25 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-The suite mocks `/api/*` and the direct Desmos governance REST requests so it stays deterministic and does not depend on live Desmos data while exercising the built SPA in a real browser.
+The suite mocks `/api/*` and the direct Desmos governance REST requests so it stays deterministic. SEO tests also invoke the real Worker with mocked upstream services, exercise server-rendered pages with JavaScript disabled, and verify hydration, metadata navigation, error statuses, crawler files and safe serialization of untrusted chain data.
+
+## Search and crawler support
+
+The Worker renders the existing React public pages into the initial HTML using RPC and REST queries. React hydrates that HTML for client navigation and polling. This adds no database or transaction indexer. The wallet initially renders disconnected; wallet connections and signing stay in the browser.
+
+Every public route has a title, description, canonical URL, Open Graph/Twitter tags and WebSite/WebPage structured data. Validator and proposal metadata use their actual content. Canonicals always use `https://lite.desmos.network`; change `SITE_ORIGIN` and the public crawler files together when changing the production domain. Wallet pages and non-production HTML responses are marked `noindex`.
+
+Unknown routes and missing records return HTTP 404. Unavailable upstream data returns HTTP 503 with `Retry-After`, without caching the error as a successful page. Static asset fallback is disabled so missing assets do not become soft 404s. Trailing slashes and lowercase transaction hashes redirect to their canonical routes. Public HTML is cached for 30 seconds, and wallet HTML is never cached.
+
+`/robots.txt` points to `/sitemap.xml`. The sitemap includes public entry pages, active validators, the latest 20 proposals, recent blocks and recent transactions. It is an entry point, not a complete chain archive; normal links, including block pagination, support further discovery.
+
+`/llms.txt` is an optional concise guide linking to `/docs/explorer.md` and public entry pages. It contains stable documentation rather than live balances or tallies. A duplicate `llms-full.txt` is intentionally omitted because the documentation is short and already directly linked. Neither file is an SEO requirement: [Google's AI search guidance](https://developers.google.com/search/docs/appearance/ai-features) says no new AI-specific text files are needed. The optional guide follows the [llms.txt proposal](https://llmstxt.org/).
+
+Use `pnpm preview` to verify the complete rendering path. Vite alone only serves the browser app. `pnpm exec wrangler deploy --dry-run` checks the Worker bundle without deploying it.
 
 ## Governance without an indexer
 
-Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the browser. They work with static SPA hosting and do not use a Worker or transaction indexer for governance reads. The REST endpoint must allow browser requests through CORS; the default Desmos mainnet API does.
+Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the browser. Initial server-rendered HTML uses the same normalization code against the Worker's `DESMOS_REST_URL`. They also work with static SPA hosting, without initial HTML rendering. Neither path uses a transaction indexer for governance reads. The REST endpoint must allow browser requests through CORS; the default Desmos mainnet API does.
 
 - Latest 20 proposals: `/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true`
 - Proposal status and stored final result: `/cosmos/gov/v1/proposals/{id}`
@@ -61,6 +75,6 @@ These are governance state queries, so transaction search/indexing is unnecessar
 
 ## Notes
 
-- The Worker serves static assets from `dist` and handles `/api/*` plus `/rpc*`.
-- Governance reads are normalized in the frontend; other explorer reads are normalized in the Worker.
+- The Worker renders public routes, serves static assets from `dist`, and handles `/api/*` plus `/rpc*`.
+- Governance normalization is shared by the browser and Worker; other explorer reads are normalized in the Worker.
 - Wallet transaction methods are scaffolded for send, staking and IBC transfer paths, but they still need live integration testing against Keplr and the Desmos Ledger app in a supported browser.

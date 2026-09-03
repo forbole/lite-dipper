@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { Panel } from "../components/ui/Panel";
-import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
+import { ValidatorIdentity } from "../components/ui/ValidatorIdentity";
 import { DESMOS_CHAIN } from "../config/chain";
 import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
@@ -12,10 +12,9 @@ import {
   formatTimeRemaining,
   hasPositiveMicroAmount,
   isPositiveDecimal,
-  parseDsmToMicro,
-  truncateMiddle
+  parseDsmToMicro
 } from "../lib/format";
-import { useWallet } from "../wallet/WalletProvider";
+import { useWallet } from "../wallet/context";
 
 type WalletRoute = "native" | "ibc";
 
@@ -393,17 +392,11 @@ export function WalletPage() {
                             to={`/validators/${delegation.validatorAddress}`}
                             className="min-w-0 flex-1 transition hover:text-white"
                           >
-                            <div className="flex items-center gap-3">
-                              <ValidatorAvatar
-                                identity={delegation.identity}
-                                moniker={delegation.moniker || truncateMiddle(delegation.validatorAddress)}
-                                size="sm"
-                              />
-                              <div className="min-w-0">
-                                <div>{delegation.moniker || truncateMiddle(delegation.validatorAddress)}</div>
-                                <div className="mt-1 text-xs text-slate-500">{truncateMiddle(delegation.validatorAddress)}</div>
-                              </div>
-                            </div>
+                            <ValidatorIdentity
+                              operatorAddress={delegation.validatorAddress}
+                              moniker={delegation.moniker}
+                              identity={delegation.identity}
+                            />
                           </Link>
                           <button
                             type="button"
@@ -463,17 +456,11 @@ export function WalletPage() {
                           to={`/validators/${delegation.validatorAddress}`}
                           className="block transition hover:text-white"
                         >
-                          <div className="flex items-center gap-3">
-                            <ValidatorAvatar
-                              identity={delegation.identity}
-                              moniker={delegation.moniker || truncateMiddle(delegation.validatorAddress)}
-                              size="sm"
-                            />
-                            <div className="min-w-0">
-                              <div>{delegation.moniker || truncateMiddle(delegation.validatorAddress)}</div>
-                              <div className="mt-1 text-xs text-slate-500">{truncateMiddle(delegation.validatorAddress)}</div>
-                            </div>
-                          </div>
+                          <ValidatorIdentity
+                            operatorAddress={delegation.validatorAddress}
+                            moniker={delegation.moniker}
+                            identity={delegation.identity}
+                          />
                         </Link>
                         <div className="mt-3 flex flex-col gap-1 text-slate-300">
                           <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
@@ -510,43 +497,24 @@ export function WalletPage() {
                             className="block transition hover:text-white"
                           >
                             <p className="text-xs uppercase tracking-[0.18em] text-slate-500">From</p>
-                            <div className="mt-1 flex items-center gap-3">
-                              <ValidatorAvatar
-                                identity={delegation.sourceIdentity}
-                                moniker={delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}
-                                size="sm"
-                              />
-                              <div className="min-w-0">
-                                <div>{delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}</div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {truncateMiddle(delegation.sourceValidatorAddress)}
-                                </div>
-                              </div>
-                            </div>
+                            <ValidatorIdentity
+                              operatorAddress={delegation.sourceValidatorAddress}
+                              moniker={delegation.sourceMoniker}
+                              identity={delegation.sourceIdentity}
+                              className="mt-1"
+                            />
                           </Link>
                           <Link
                             to={`/validators/${delegation.destinationValidatorAddress}`}
                             className="block transition hover:text-white"
                           >
                             <p className="text-xs uppercase tracking-[0.18em] text-slate-500">To</p>
-                            <div className="mt-1 flex items-center gap-3">
-                              <ValidatorAvatar
-                                identity={delegation.destinationIdentity}
-                                moniker={
-                                  delegation.destinationMoniker || truncateMiddle(delegation.destinationValidatorAddress)
-                                }
-                                size="sm"
-                              />
-                              <div className="min-w-0">
-                                <div>
-                                  {delegation.destinationMoniker ||
-                                    truncateMiddle(delegation.destinationValidatorAddress)}
-                                </div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {truncateMiddle(delegation.destinationValidatorAddress)}
-                                </div>
-                              </div>
-                            </div>
+                            <ValidatorIdentity
+                              operatorAddress={delegation.destinationValidatorAddress}
+                              moniker={delegation.destinationMoniker}
+                              identity={delegation.destinationIdentity}
+                              className="mt-1"
+                            />
                           </Link>
                           <div className="flex flex-col gap-1 text-slate-300">
                             <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>

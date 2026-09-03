@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow"><stop stop-color="#164e63"/><stop offset="1" stop-color="#020617"/></radialGradient>
+    <linearGradient id="line"><stop stop-color="#38bdf8"/><stop offset="1" stop-color="#fde68a"/></linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#020617"/>
+  <ellipse cx="870" cy="285" rx="530" ry="390" fill="url(#glow)"/>
+  <g stroke="url(#line)" stroke-width="2" fill="none" opacity=".6">
+    <path d="M790 145 905 100 1030 180 990 315 865 350 790 145 720 255 865 350 940 495 1090 440 990 315"/>
+    <path d="M720 255 620 410 790 470 865 350"/>
+  </g>
+  <g fill="#7dd3fc">
+    <circle cx="790" cy="145" r="7"/><circle cx="905" cy="100" r="5"/><circle cx="1030" cy="180" r="6"/>
+    <circle cx="990" cy="315" r="8"/><circle cx="720" cy="255" r="5"/><circle cx="620" cy="410" r="4"/>
+    <circle cx="790" cy="470" r="5"/><circle cx="1090" cy="440" r="5"/>
+  </g>
+  <g fill="#fde68a"><circle cx="865" cy="350" r="10"/><circle cx="940" cy="495" r="6"/></g>
+  <rect x="78" y="120" width="56" height="4" rx="2" fill="#38bdf8"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="78" y="188" fill="#7dd3fc" font-size="24" letter-spacing="5">DESMOS EXPLORER</text>
+    <text x="73" y="290" fill="#f8fafc" font-size="86" font-weight="700">Lite-Dipper</text>
+    <text x="78" y="359" fill="#cbd5e1" font-size="28">Explore the Desmos blockchain.</text>
+    <text x="78" y="406" fill="#cbd5e1" font-size="23">Validators · Blocks · Governance</text>
+    <text x="78" y="540" fill="#94a3b8" font-size="22">lite.desmos.network</text>
+  </g>
+</svg>

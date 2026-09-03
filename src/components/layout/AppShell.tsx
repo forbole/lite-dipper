@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { DESMOS_TOKEN_ICON_URL } from "../../config/chain";
-import { LAST_PATH_STORAGE_KEY } from "../../app/router";
-import { useWallet } from "../../wallet/WalletProvider";
+import { useWallet } from "../../wallet/context";
 import { truncateMiddle } from "../../lib/format";
 import { GalaxyBackground } from "./GalaxyBackground";
+import { usePageData } from "../../seo/PageData";
+import { pageMetadata, resolvePage } from "../../seo/page";
+import { useDocumentMetadata } from "../../seo/Metadata";
+import { NotFoundPage } from "../../pages/NotFoundPage";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home", icon: "space_dashboard" },
@@ -43,30 +46,19 @@ function deriveHeading(pathname: string): string {
 export function AppShell() {
   const location = useLocation();
   const { connection } = useWallet();
-  const [collapsed, setCollapsed] = useState(() =>
-    typeof window !== "undefined" ? localStorage.getItem("lite-dipper-sidebar") === "collapsed" : false
-  );
+  const [collapsed, setCollapsed] = useState(false);
+  const { resources, errors, initialPath, initialStatus } = usePageData();
+  const route = resolvePage(`${location.pathname}${location.search}`);
+  const status = errors[route.key]?.status ?? (route.path === initialPath && !resources[route.key] ? initialStatus : 200);
+  useDocumentMetadata(pageMetadata(route, resources, status));
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("lite-dipper-sidebar", collapsed ? "collapsed" : "expanded");
-    }
+    try { setCollapsed(localStorage.getItem("lite-dipper-sidebar") === "collapsed"); } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("lite-dipper-sidebar", collapsed ? "collapsed" : "expanded"); } catch {}
   }, [collapsed]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      window.sessionStorage.setItem(
-        LAST_PATH_STORAGE_KEY,
-        `${location.pathname}${location.search}${location.hash}`
-      );
-    } catch {
-      // Ignore storage failures and keep navigation working.
-    }
-  }, [location.hash, location.pathname, location.search]);
 
   return (
     <div className="relative min-h-screen bg-app text-slate-100">
@@ -147,7 +139,7 @@ export function AppShell() {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
                   <span className="h-2 w-2 rounded-full bg-emerald-300" />
-                  Explorer online: RPC & REST healthy
+                  Data from Desmos RPC & REST
                 </div>
                 <Link
                   to="/wallet"
@@ -161,7 +153,7 @@ export function AppShell() {
 
           <div className="relative z-10 flex flex-1 flex-col w-full px-4 py-6 md:px-6 xl:px-8">
             <div className="flex-1">
-              <Outlet />
+              {status === 404 || route.kind === "notfound" ? <NotFoundPage /> : <Outlet />}
             </div>
             <p className="pt-8 text-center text-xs text-slate-500">
               &copy; 2026{" "}

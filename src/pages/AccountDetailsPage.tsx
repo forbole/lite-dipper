@@ -3,7 +3,7 @@ import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { MetricCard } from "../components/ui/MetricCard";
 import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
-import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
+import { ValidatorIdentity } from "../components/ui/ValidatorIdentity";
 import { DESMOS_TOKEN_ICON_URL } from "../config/chain";
 import { useApiResource } from "../hooks/useApiResource";
 import {
@@ -114,17 +114,11 @@ export function AccountDetailsPage() {
                         to={`/validators/${delegation.validatorAddress}`}
                         className="block rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200 transition hover:border-sky-300/30 hover:bg-white/[0.06]"
                       >
-                        <div className="flex items-center gap-3">
-                          <ValidatorAvatar
-                            identity={delegation.identity}
-                            moniker={delegation.moniker || truncateMiddle(delegation.validatorAddress)}
-                            size="sm"
-                          />
-                          <div className="min-w-0">
-                            <div>{delegation.moniker || truncateMiddle(delegation.validatorAddress)}</div>
-                            <div className="mt-1 text-xs text-slate-500">{truncateMiddle(delegation.validatorAddress)}</div>
-                          </div>
-                        </div>
+                        <ValidatorIdentity
+                          operatorAddress={delegation.validatorAddress}
+                          moniker={delegation.moniker}
+                          identity={delegation.identity}
+                        />
                         <div className="mt-2">{formatFixedDsmFromMicro(delegation.amount)}</div>
                       </Link>
                     ))
@@ -143,21 +137,15 @@ export function AccountDetailsPage() {
                         key={`${delegation.validatorAddress}-${delegation.completionTime}-${delegation.amount}-${index}`}
                         className="rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200"
                       >
-                        <div className="flex items-center gap-3">
-                          <ValidatorAvatar
-                            identity={delegation.identity}
-                            moniker={delegation.moniker || truncateMiddle(delegation.validatorAddress)}
-                            size="sm"
-                          />
-                          <div className="min-w-0">
-                            <div>{delegation.moniker || truncateMiddle(delegation.validatorAddress)}</div>
-                            <div className="mt-1 text-xs text-slate-500">{truncateMiddle(delegation.validatorAddress)}</div>
-                          </div>
-                        </div>
+                        <ValidatorIdentity
+                          operatorAddress={delegation.validatorAddress}
+                          moniker={delegation.moniker}
+                          identity={delegation.identity}
+                        />
                         <div className="mt-3 flex flex-col gap-1 text-slate-300">
                           <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
                           <p className="text-xs text-slate-400">
-                            Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
+                            Target end time: {formatDateTime(delegation.completionTime)} (<span suppressHydrationWarning>{formatTimeRemaining(delegation.completionTime)}</span>)
                           </p>
                         </div>
                       </div>
@@ -186,45 +174,26 @@ export function AccountDetailsPage() {
                         <div className="space-y-3">
                           <div>
                             <p className="text-xs uppercase tracking-[0.18em] text-slate-500">From</p>
-                            <div className="mt-1 flex items-center gap-3">
-                              <ValidatorAvatar
-                                identity={delegation.sourceIdentity}
-                                moniker={delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}
-                                size="sm"
-                              />
-                              <div className="min-w-0">
-                                <div>{delegation.sourceMoniker || truncateMiddle(delegation.sourceValidatorAddress)}</div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {truncateMiddle(delegation.sourceValidatorAddress)}
-                                </div>
-                              </div>
-                            </div>
+                            <ValidatorIdentity
+                              operatorAddress={delegation.sourceValidatorAddress}
+                              moniker={delegation.sourceMoniker}
+                              identity={delegation.sourceIdentity}
+                              className="mt-1"
+                            />
                           </div>
                           <div>
                             <p className="text-xs uppercase tracking-[0.18em] text-slate-500">To</p>
-                            <div className="mt-1 flex items-center gap-3">
-                              <ValidatorAvatar
-                                identity={delegation.destinationIdentity}
-                                moniker={
-                                  delegation.destinationMoniker || truncateMiddle(delegation.destinationValidatorAddress)
-                                }
-                                size="sm"
-                              />
-                              <div className="min-w-0">
-                                <div>
-                                  {delegation.destinationMoniker ||
-                                    truncateMiddle(delegation.destinationValidatorAddress)}
-                                </div>
-                                <div className="mt-1 text-xs text-slate-500">
-                                  {truncateMiddle(delegation.destinationValidatorAddress)}
-                                </div>
-                              </div>
-                            </div>
+                            <ValidatorIdentity
+                              operatorAddress={delegation.destinationValidatorAddress}
+                              moniker={delegation.destinationMoniker}
+                              identity={delegation.destinationIdentity}
+                              className="mt-1"
+                            />
                           </div>
                           <div className="flex flex-col gap-1 text-slate-300">
                             <p className="text-white">{formatFixedDsmFromMicro(delegation.amount)}</p>
                             <p className="text-xs text-slate-400">
-                              Target end time: {formatDateTime(delegation.completionTime)} ({formatTimeRemaining(delegation.completionTime)})
+                              Target end time: {formatDateTime(delegation.completionTime)} (<span suppressHydrationWarning>{formatTimeRemaining(delegation.completionTime)}</span>)
                             </p>
                           </div>
                         </div>

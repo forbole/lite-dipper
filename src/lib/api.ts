@@ -7,7 +7,7 @@ export async function apiGet<T>(path: string, options?: Pick<RequestInit, "cache
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new HttpError(response.status, await response.text());
   }
 
   return (await response.json()) as T;
@@ -29,3 +29,4 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 
   return (await response.json()) as T;
 }
+import { HttpError } from "./httpError";

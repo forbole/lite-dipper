@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Panel } from "../components/ui/Panel";
+import { ProfileBio } from "../components/ui/ProfileBio";
 import { StatusPill } from "../components/ui/StatusPill";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { useApiResource } from "../hooks/useApiResource";
@@ -16,7 +17,7 @@ import {
   truncateMiddle
 } from "../lib/format";
 import type { ValidatorDetailsPayload, ValidatorSummary } from "../types/desmos";
-import { useWallet } from "../wallet/WalletProvider";
+import { useWallet } from "../wallet/context";
 import { useParams } from "react-router-dom";
 
 type StakingAction = "delegate" | "undelegate" | "redelegate";
@@ -265,9 +266,11 @@ export function ValidatorDetailsPage() {
         </div>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
+          <div className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
             <p className="text-sm text-slate-400">{profile?.bio ? "Bio" : "Details"}</p>
-            <p className="mt-2 whitespace-pre-wrap break-words">{profile?.bio || data.validator.details || "No validator details provided."}</p>
+            {profile?.bio ? <ProfileBio bio={profile.bio} /> : (
+              <p className="mt-2 whitespace-pre-wrap break-words">{data.validator.details || "No validator details provided."}</p>
+            )}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">

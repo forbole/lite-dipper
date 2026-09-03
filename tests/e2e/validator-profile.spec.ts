@@ -1,81 +1,5 @@
-import { test as base, expect } from "@playwright/test";
-import worker from "../../worker/index";
-
-const OPERATOR = "desmosvaloper17lca9smrdlwkznr92hypzrgsjkelnxeaacgrwq";
-const ACCOUNT = "desmos17lca9smrdlwkznr92hypzrgsjkelnxear4qhyj";
-const IDENTITY = "TESTKEYBASE";
-const PROFILE = {
-  "@type": "/desmos.profiles.v3.Profile",
-  account: { "@type": "/cosmos.auth.v1beta1.BaseAccount", address: ACCOUNT },
-  dtag: "apollo", nickname: "Apollo Community", bio: "An on-chain validator profile.\nSupporting the Desmos community.",
-  pictures: { profile: "https://profile-images.test/avatar.svg", cover: "https://profile-images.test/cover.svg" },
-  creation_date: "2021-11-02T16:58:41.653318881Z"
-};
-const IMAGE = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="200"><rect width="800" height="200" fill="#155e75"/><circle cx="400" cy="100" r="70" fill="#38bdf8"/></svg>';
-
-type ProfileApi = {
-  profile: unknown;
-  status: number;
-  brokenImages: boolean;
-  requests: string[];
-};
-
-const test = base.extend<{ profileApi: ProfileApi }>({
-  profileApi: async ({ page }, use) => {
-    const state: ProfileApi = { profile: structuredClone(PROFILE), status: 200, brokenImages: false, requests: [] };
-    const originalFetch = globalThis.fetch;
-    const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
-    Object.defineProperty(globalThis, "caches", { configurable: true, value: {
-      open: async () => ({ match: async () => undefined, put: async () => {} })
-    } });
-    // Keep the real validator normalization and account derivation in the path.
-    // Only replace the public REST service and Keybase lookup.
-    globalThis.fetch = async (input) => {
-      const url = new URL(String(input));
-      if (url.origin === "https://keybase.io") return Response.json({ them: [{
-        basics: { username: "staking-name" }, pictures: { primary: { url: "https://profile-images.test/keybase.svg" } }
-      }] });
-      if (url.origin !== "https://validator-rest.test") throw new Error(`Unexpected upstream: ${url}`);
-      state.requests.push(url.pathname);
-      if (url.pathname === `/cosmos/staking/v1beta1/validators/${OPERATOR}`) return Response.json({ validator: {
-        operator_address: OPERATOR, consensus_pubkey: { key: Buffer.alloc(32, 1).toString("base64") },
-        description: { moniker: "Staking name", identity: IDENTITY, details: "Original staking description.",
-          website: "https://validator.example", security_contact: "security@validator.example" },
-        status: "BOND_STATUS_BONDED", jailed: false, tokens: "12345000000",
-        commission: { commission_rates: { rate: "0.05" } }
-      } });
-      if (url.pathname === `/desmos/profiles/v3/profiles/${ACCOUNT}`) return Response.json(
-        state.status === 200 ? { profile: state.profile } : { error: "Profile unavailable" }, { status: state.status }
-      );
-      throw new Error(`Unexpected REST path: ${url.pathname}`);
-    };
-    await page.route("**/api/validators**", async (route) => {
-      if (new URL(route.request().url()).pathname === "/api/validators") {
-        await route.fulfill({ json: [] });
-        return;
-      }
-      const pending: Promise<unknown>[] = [];
-      const response = await worker.fetch(new Request(route.request().url()), {
-        DESMOS_REST_URL: "https://validator-rest.test"
-      } as Parameters<typeof worker.fetch>[1], {
-        waitUntil: (promise: Promise<unknown>) => { pending.push(promise); }
-      } as Parameters<typeof worker.fetch>[2]);
-      await Promise.all(pending);
-      await route.fulfill({ status: response.status, headers: Object.fromEntries(response.headers), body: await response.text() });
-    });
-    for (const pattern of ["https://profile-images.test/**", "**/api/keybase/avatar/**"]) {
-      await page.route(pattern, (route) => route.fulfill(state.brokenImages
-        ? { status: 404 }
-        : { contentType: "image/svg+xml", body: IMAGE }));
-    }
-    try { await use(state); }
-    finally {
-      globalThis.fetch = originalFetch;
-      if (originalCaches) Object.defineProperty(globalThis, "caches", originalCaches);
-      else Reflect.deleteProperty(globalThis, "caches");
-    }
-  }
-});
+import { expect } from "@playwright/test";
+import { test, OPERATOR, ACCOUNT, IDENTITY, CONSENSUS, UNKNOWN_CONSENSUS, INACTIVE_OPERATOR, INACTIVE_ACCOUNT, PROFILE } from "./fixtures/explorer";
 
 test("uses the validator account's Desmos Profile and preserves staking metadata", async ({ page, profileApi }, testInfo) => {
   await page.goto(`/validators/${OPERATOR}`);
@@ -109,6 +33,11 @@ for (const scenario of ["absent", "unavailable", "different account"] as const) 
     await expect(page.getByText("Desmos Profile", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("img", { name: "Staking name avatar" })).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
     await expect(page.getByRole("heading", { name: "Delegation Actions" })).toBeVisible();
+    const profileResponse = page.waitForResponse((response) => response.url().endsWith(`/validators/${OPERATOR}/profile`));
+    await page.goto("/validators");
+    expect(await (await profileResponse).json()).toBeNull();
+    await expect(page.getByText("Staking name", { exact: true })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Staking name avatar" })).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
   });
 }
 
@@ -130,4 +59,237 @@ test("broken profile images fall back without hiding the profile or staking acti
   await expect(page.getByRole("img", { name: "Apollo Community cover" })).toHaveCount(0);
   await expect(page.getByText("@apollo", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Delegation Actions" })).toBeVisible();
+});
+
+test("resolves retired IPFS gateways without changing the profile image CID or path", async ({ page, profileApi }) => {
+  const cid = "QmYeeFgvSroRRWhZNcWBkAbkdvh7fdeDTJKGkKR6i3g3vQ";
+  profileApi.profile = { ...PROFILE, pictures: {
+    profile: `https://cloudflare-ipfs.com/ipfs/${cid}`,
+    cover: `https://cf-ipfs.com/ipfs/${cid}/cover.png?filename=cover.png`
+  } };
+  await page.goto(`/validators/${OPERATOR}`);
+  const avatar = page.getByRole("img", { name: "Apollo Community avatar" });
+  await expect(avatar).toHaveAttribute("src", `https://ipfs.desmos.network/ipfs/${cid}`);
+  await expect.poll(() => avatar.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+  await expect(page.getByRole("img", { name: "Apollo Community cover" })).toHaveAttribute(
+    "src", `https://ipfs.desmos.network/ipfs/${cid}/cover.png?filename=cover.png`
+  );
+});
+
+test("renders profile Markdown with readable lists and safe external links", async ({ page, profileApi }, testInfo) => {
+  profileApi.profile = { ...PROFILE, bio: [
+    "## Community projects",
+    "",
+    "- Building **Go-find.me**, a *social network* on Desmos.",
+    "- Maintaining [DesmosJS](https://github.com/g-luca/desmosjs?tab=readme#usage).",
+    "",
+    "1. [Website](http://validator.example)",
+    "2. [Contact us](mailto:validator@example.com)",
+    "",
+    "> Supporting the community with `DesmosJS`.",
+    "",
+    "![Community badge](https://profile-images.test/badge.svg)",
+    "",
+    "```text",
+    "long-code-example".repeat(40),
+    "```"
+  ].join("\n") };
+  await page.goto(`/validators/${OPERATOR}`);
+  const bio = page.locator(".profile-bio");
+  await expect(bio.getByRole("heading", { name: "Community projects" })).toBeVisible();
+  await expect(bio.locator("ul > li")).toHaveCount(2);
+  await expect(bio.locator("ol > li")).toHaveCount(2);
+  await expect(bio.locator("strong")).toHaveText("Go-find.me");
+  await expect(bio.locator("em")).toHaveText("social network");
+  await expect(bio.locator("blockquote code")).toHaveText("DesmosJS");
+  const link = bio.getByRole("link", { name: "DesmosJS", exact: true });
+  await expect(link).toHaveAttribute("href", "https://github.com/g-luca/desmosjs?tab=readme#usage");
+  await expect(link).toHaveAttribute("target", "_blank");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(bio.getByRole("link", { name: "Website", exact: true })).toHaveAttribute("href", "http://validator.example/");
+  await expect(bio.getByRole("link", { name: "Contact us" })).toHaveAttribute("href", "mailto:validator@example.com");
+  await expect(bio.getByRole("img", { name: "Community badge" })).toHaveAttribute("referrerpolicy", "no-referrer");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("profile-markdown-mobile.png"), fullPage: true });
+});
+
+test("removes raw HTML and unsafe bio URLs while retaining link text", async ({ page, profileApi }) => {
+  const unsafeLinks = [
+    ["Script link", "javascript:alert(1)"],
+    ["Mixed-case scheme", "JaVaScRiPt:alert(1)"],
+    ["Encoded scheme", "&#106;avascript&#58;alert(1)"],
+    ["Control character", "java&#x09;script:alert(1)"],
+    ["Data link", "data:text/html,unsafe"],
+    ["VBScript link", "vbscript:msgbox(1)"],
+    ["File link", "file:///etc/passwd"],
+    ["Credential link", "https://trusted.example@untrusted.example/path"],
+    ["Relative link", "/wallet"],
+    ["Protocol-relative link", "//untrusted.example/path"]
+  ];
+  profileApi.profile = { ...PROFILE, bio: [
+    ...unsafeLinks.map(([label, url]) => `[${label}](${url})`),
+    "",
+    '![Blocked image](data:image/svg+xml,unsafe)',
+    '![Email image](mailto:validator@example.com)',
+    "",
+    '<script>window.__profileBioExecuted = true</script>',
+    "",
+    '<iframe src="https://untrusted.example"></iframe>',
+    "",
+    '<iframe srcdoc="<script>parent.__profileBioExecuted = true</script>"></iframe>',
+    "",
+    '<object data="https://untrusted.example/embed"></object>',
+    "",
+    '<embed src="https://untrusted.example/embed">',
+    "",
+    '<style>body { display: none; }</style>',
+    "",
+    '<link rel="stylesheet" href="https://untrusted.example/style.css">',
+    "",
+    '<form action="https://untrusted.example"><input name="seed"><button>Submit</button></form>',
+    "",
+    '<svg onload="window.__profileBioExecuted = true"></svg>',
+    "",
+    '<math><mtext><img src="x" onerror="window.__profileBioExecuted = true"></mtext></math>',
+    "",
+    '<img src="https://untrusted.example/pixel" onerror="window.__profileBioExecuted = true">',
+    "",
+    '<a href="javascript:alert(1)">Raw HTML link</a>',
+    "",
+    '```javascript',
+    'window.__profileBioExecuted = true;',
+    '```',
+    "",
+    '**Still readable**'
+  ].join("\n") };
+  const externalRequests: string[] = [];
+  await page.route("https://untrusted.example/**", async (route) => {
+    externalRequests.push(route.request().url());
+    await route.abort();
+  });
+  await page.goto(`/validators/${OPERATOR}`);
+  const bio = page.locator(".profile-bio");
+  await expect(bio.locator("strong")).toHaveText("Still readable");
+  for (const [label] of unsafeLinks) await expect(bio.getByText(label, { exact: true })).toBeVisible();
+  await expect(bio.getByText("Blocked image", { exact: true })).toBeVisible();
+  await expect(bio.getByText("Email image", { exact: true })).toBeVisible();
+  await expect(bio.locator("a, img, script, iframe, object, embed, style, link, form, input, button, svg, math")).toHaveCount(0);
+  await expect(bio.locator("pre code")).toHaveText("window.__profileBioExecuted = true;");
+  expect(await bio.evaluate((element) => Array.from(element.querySelectorAll("*")).some((node) =>
+    Array.from(node.attributes).some((attribute) => /^on/i.test(attribute.name))
+  ))).toBe(false);
+  expect(await page.evaluate(() => Reflect.get(window, "__profileBioExecuted"))).toBeUndefined();
+  expect(externalRequests).toEqual([]);
+});
+
+test("uses profile names and avatars on the validator list without changing validator links or stake", async ({ page, profileApi }) => {
+  await page.goto("/validators");
+  const row = page.locator(`a[href="/validators/${OPERATOR}"]`);
+  await expect(row.getByText("Apollo Community", { exact: true })).toBeVisible();
+  await expect(row.getByRole("img", { name: "Apollo Community avatar" })).toHaveAttribute("src", PROFILE.pictures.profile);
+  await expect(row.getByText("12,345 DSM", { exact: true })).toBeVisible();
+  expect(profileApi.requests.filter((path) => path === `/desmos/profiles/v3/profiles/${ACCOUNT}`)).toHaveLength(1);
+  expect(profileApi.requests).not.toContain(`/cosmos/staking/v1beta1/validators/${OPERATOR}`);
+  await row.click();
+  await expect(page.getByRole("heading", { name: "Apollo Community", exact: true })).toBeVisible();
+});
+
+for (const view of ["wallet", "account"] as const) {
+  test(`updates ${view} delegation identities without waiting for profiles to load`, async ({ page, profileApi }, testInfo) => {
+    let releaseProfile!: () => void;
+    profileApi.profileReady = new Promise<void>((resolve) => { releaseProfile = resolve; });
+    if (view === "wallet") {
+      await page.addInitScript((address) => {
+        window.keplr = { enable: async () => {}, getKey: async () => { throw new Error("Unused"); } };
+        window.getOfflineSigner = () => ({
+          getAccounts: async () => [{ address, algo: "secp256k1", pubkey: new Uint8Array(33) }],
+          signDirect: async () => { throw new Error("This test must not sign transactions."); }
+        });
+      }, ACCOUNT);
+    }
+    try {
+      await page.goto(view === "wallet" ? "/wallet" : `/accounts/${ACCOUNT}`);
+      if (view === "wallet") {
+        await page.getByRole("button", { name: /^Keplr/ }).click();
+        await expect(page.getByText("Available: 100.000000 DSM", { exact: true })).toBeVisible();
+        await expect(page.getByText("Total rewards: 1.000000 DSM", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Claim rewards", exact: true })).toBeEnabled();
+      }
+      await expect(page.getByText("Staking name", { exact: true })).toHaveCount(3);
+      // An unbonded validator can still have a profile even without a directory entry.
+      await expect(page.getByText("Inactive Community", { exact: true })).toBeVisible();
+      releaseProfile();
+      await expect(page.getByText("Apollo Community", { exact: true })).toHaveCount(3);
+      const avatars = page.getByRole("img", { name: "Apollo Community avatar", exact: true });
+      await expect(avatars).toHaveCount(3);
+      for (const avatar of await avatars.all()) await expect(avatar).toHaveAttribute("src", PROFILE.pictures.profile);
+      await expect(page.getByRole("img", { name: "Inactive Community avatar" })).toHaveAttribute("src", PROFILE.pictures.profile);
+      expect(profileApi.requests.filter((path) => path === `/desmos/profiles/v3/profiles/${ACCOUNT}`)).toHaveLength(1);
+      expect(profileApi.requests.filter((path) => path === `/desmos/profiles/v3/profiles/${INACTIVE_ACCOUNT}`)).toHaveLength(1);
+      expect(profileApi.requests).not.toContain(`/cosmos/staking/v1beta1/validators/${INACTIVE_OPERATOR}`);
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`${view}-profile-identities.png`), fullPage: true });
+    } finally {
+      releaseProfile();
+    }
+  });
+}
+
+test("renders profile names as text and rejects unsafe list avatar URLs", async ({ page, profileApi }) => {
+  const nickname = '<img src="x" onerror="alert(1)">';
+  profileApi.profile = { ...PROFILE, nickname, pictures: { profile: "javascript:alert(1)" } };
+  await page.goto("/validators");
+  const row = page.locator(`a[href="/validators/${OPERATOR}"]`);
+  await expect(row.getByText(nickname, { exact: true })).toBeVisible();
+  await expect(row.getByRole("img")).toHaveCount(1);
+  await expect(row.getByRole("img")).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
+  await expect(row.locator("[onerror], script, iframe")).toHaveCount(0);
+});
+
+test("resolves proposer consensus addresses to profile accounts on block lists and details", async ({ page, profileApi }) => {
+  let releaseProfile!: () => void;
+  profileApi.profileReady = new Promise<void>((resolve) => { releaseProfile = resolve; });
+  try {
+    const blockResponse = page.waitForResponse((response) => response.url().endsWith("/api/blocks?limit=20"));
+    await page.goto("/blocks");
+    const blocks = await (await blockResponse).json();
+    expect(blocks[0].proposerAddress).toBe(CONSENSUS.toLowerCase());
+    expect(blocks[0].proposerOperatorAddress).toBe(OPERATOR);
+    expect(blocks[2].proposerAddress).toBe(UNKNOWN_CONSENSUS);
+    expect(blocks[2].proposerOperatorAddress).toBe("");
+    await expect(page.getByRole("row")).toHaveCount(4);
+    await expect(page.getByText("Staking name", { exact: true })).toHaveCount(2);
+    releaseProfile();
+    await expect(page.getByText("Apollo Community", { exact: true })).toHaveCount(2);
+    for (const avatar of await page.getByRole("img", { name: "Apollo Community avatar" }).all()) {
+      await expect(avatar).toHaveAttribute("src", PROFILE.pictures.profile);
+    }
+    await expect(page.getByRole("row").last().getByRole("img")).toHaveAttribute("src", /^data:image\/svg\+xml/);
+    expect(profileApi.requests.filter((path) => path.startsWith("/desmos/profiles/"))).toEqual([
+      `/desmos/profiles/v3/profiles/${ACCOUNT}`
+    ]);
+    await page.getByRole("link", { name: "3", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Block 3", exact: true })).toBeVisible();
+    await expect(page.getByText("Apollo Community", { exact: true })).toHaveCount(2);
+    await expect(page.getByRole("heading", { name: "Signed Validators (1)" })).toBeVisible();
+    await expect(page.locator(`a[href="/validators/${OPERATOR}"]`).getByRole("img")).toHaveAttribute("src", PROFILE.pictures.profile);
+    expect(profileApi.requests.filter((path) => path.startsWith("/desmos/profiles/"))).toHaveLength(1);
+  } finally {
+    releaseProfile();
+  }
+});
+
+test("keeps block proposers visible when Desmos Profiles are unavailable", async ({ page, profileApi }) => {
+  profileApi.status = 503;
+  const profileResponse = page.waitForResponse((response) => response.url().endsWith(`/validators/${OPERATOR}/profile`));
+  await page.goto("/blocks");
+  expect(await (await profileResponse).json()).toBeNull();
+  await expect(page.getByRole("row")).toHaveCount(4);
+  await expect(page.getByText("Staking name", { exact: true })).toHaveCount(2);
+  for (const avatar of await page.getByRole("img", { name: "Staking name avatar" }).all()) {
+    await expect(avatar).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
+  }
+  await expect(page.getByRole("row").last().getByRole("img")).toHaveAttribute("src", /^data:image\/svg\+xml/);
 });

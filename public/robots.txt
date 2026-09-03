@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /rpc
+
+Sitemap: https://lite.desmos.network/sitemap.xml

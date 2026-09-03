@@ -15,6 +15,7 @@ export interface BlockSummary {
   hash: string;
   time: string;
   proposerAddress: string;
+  proposerOperatorAddress?: string;
   proposerMoniker?: string;
   proposerIdentity?: string;
   txCount: number;

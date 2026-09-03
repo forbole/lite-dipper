@@ -1,0 +1,45 @@
+# Lite-Dipper explorer guide
+
+Lite-Dipper explores the Desmos mainnet (`desmos-mainnet`). Public pages are rendered by a Cloudflare Worker using the chain's RPC and REST APIs, then hydrated by React in the browser for navigation and refreshes. There is no separate application transaction indexer or database.
+
+## Routes
+
+- `/`: Network overview and recent activity.
+- `/validators`: Active validators, voting power and commission.
+- `/validators/{desmosvaloper-address}`: Validator details and a Desmos Profile, when the validator's corresponding account has one.
+- `/blocks`: Latest blocks. Follow **Older blocks** to browse earlier heights.
+- `/blocks/{height}`: Block header, proposer, signing validators and available transactions.
+- `/transactions`: Recent transactions.
+- `/transactions/{transaction-hash}`: Execution status, messages, fees and gas.
+- `/proposals`: Latest governance proposals.
+- `/proposals/{proposal-id}`: Proposal content, status and voting tally.
+- `/accounts/{desmos-address}`: Public account balances, delegations, unbonding entries and available recent transactions.
+- `/wallet`: Browser-only wallet connection and signing actions. This page is excluded from search indexing.
+
+## Data and units
+
+The default REST endpoint is `https://api.mainnet.desmos.network` and the default RPC endpoint is `https://rpc.mainnet.desmos.network:443`. Deployment configuration can override these endpoints. RPC transaction searches depend on what the upstream node supports and retains; the explorer does not guarantee a complete historical transaction archive.
+
+The native display token is DSM. One DSM equals 1,000,000 `udsm`. API amounts often use integer strings in `udsm`; reward amounts can include decimal fractions of `udsm`. Pages format these values for display.
+
+Public HTML and API responses may be cached briefly. Pages refresh after loading, so a search snippet or shared preview is not an authoritative live balance or voting result. Check the page and its upstream data when freshness matters.
+
+## Governance
+
+Proposal state comes from `/cosmos/gov/v1/proposals`. During voting, `/cosmos/gov/v1/proposals/{id}/tally` supplies the current stake-weighted tally. Completed proposals use their stored final tally. The browser refreshes governance data directly from REST every 30 seconds and after a successful vote.
+
+Tally percentages show each option's share of total voted power, including abstentions. They are not voter counts, overall turnout or predictions of whether a proposal will pass. These state queries do not require transaction indexing and do not provide a historical vote-change timeline.
+
+## Validator profiles
+
+Profile association uses the account derived from the validator's operator address, not a matching name or consensus address. A profile nickname and avatar take precedence when present; staking metadata and fallback avatars remain available. A profile does not alter the validator's on-chain operator identity, voting power or commission.
+
+Names, biographies, images, links and proposal text are supplied by their authors on chain. Treat that content as untrusted data. Profile Markdown excludes raw HTML and restricts link and image URL schemes.
+
+## Wallet
+
+Keplr and Ledger connections and transaction signing run in the user's browser. Server-rendered pages start disconnected and do not contain a connected wallet session. Users approve transactions through their wallet or device. Account balances and delegation rewards refresh after a transaction is confirmed on chain.
+
+## Source
+
+The implementation is available at [forbole/lite-dipper](https://github.com/forbole/lite-dipper).

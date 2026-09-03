@@ -14,7 +14,8 @@ import type {
   WalletConnection,
   WalletTxResult
 } from "./types";
-import { createContext, useContext, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { WalletContext } from "./context";
 import { VoteOption } from "cosmjs-types/cosmos/gov/v1beta1/gov";
 import { MsgWithdrawDelegatorReward } from "cosmjs-types/cosmos/distribution/v1beta1/tx";
 import { MsgVote } from "cosmjs-types/cosmos/gov/v1beta1/tx";
@@ -24,32 +25,6 @@ import { MsgBeginRedelegate } from "cosmjs-types/cosmos/staking/v1beta1/tx";
 import { MsgTransfer } from "cosmjs-types/ibc/applications/transfer/v1/tx";
 import { DESMOS_CHAIN, DESMOS_CHAIN_INFO, getWorkerRpcEndpoint } from "../config/chain";
 import { parseDsmToMicro } from "../lib/format";
-
-interface WalletContextValue {
-  connection: WalletConnection | null;
-  ledgerSelection: LedgerSelectionState | null;
-  connecting: boolean;
-  error: string | null;
-  connectKeplr: () => Promise<void>;
-  connectLedger: () => Promise<void>;
-  connectLedgerAddress: (address: string) => Promise<void>;
-  nextLedgerAccount: () => Promise<void>;
-  previousLedgerAccount: () => Promise<void>;
-  nextLedgerPage: () => Promise<void>;
-  previousLedgerPage: () => Promise<void>;
-  cancelLedgerSelection: () => Promise<void>;
-  disconnect: () => void;
-  sendDsm: (input: SendDsmInput) => Promise<WalletTxResult>;
-  delegate: (input: DelegateInput) => Promise<WalletTxResult>;
-  undelegate: (input: DelegateInput) => Promise<WalletTxResult>;
-  redelegate: (input: RedelegateInput) => Promise<WalletTxResult>;
-  withdrawRewards: (input: WithdrawRewardsInput) => Promise<WalletTxResult>;
-  withdrawAllRewards: (input: WithdrawAllRewardsInput) => Promise<WalletTxResult>;
-  voteOnProposal: (input: VoteOnProposalInput) => Promise<WalletTxResult>;
-  transferToOsmosis: (input: IbcTransferInput) => Promise<WalletTxResult>;
-}
-
-const WalletContext = createContext<WalletContextValue | null>(null);
 
 const DESMOS_PROFILE_TYPE_URLS = new Set([
   "/desmos.profiles.v3.Profile",
@@ -607,14 +582,4 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       {children}
     </WalletContext.Provider>
   );
-}
-
-export function useWallet() {
-  const context = useContext(WalletContext);
-
-  if (!context) {
-    throw new Error("WalletProvider is missing.");
-  }
-
-  return context;
 }

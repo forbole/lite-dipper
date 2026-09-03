@@ -42,6 +42,61 @@ textarea {
   font: inherit;
 }
 
+.profile-bio {
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+}
+
+.profile-bio :where(p, ul, ol, blockquote, pre, hr) {
+  margin-block: 0.75rem;
+}
+
+.profile-bio :where(h1, h2, h3, h4, h5, h6) {
+  margin-block: 1rem 0.5rem;
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.profile-bio > :first-child { margin-top: 0; }
+.profile-bio > :last-child { margin-bottom: 0; }
+
+.profile-bio ul { list-style-type: disc; padding-left: 1.25rem; }
+.profile-bio ol { list-style-type: decimal; padding-left: 1.25rem; }
+.profile-bio li + li { margin-top: 0.25rem; }
+
+.profile-bio a {
+  color: #bae6fd;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.profile-bio a:hover { color: #fff; }
+
+.profile-bio blockquote {
+  border-left: 2px solid #475569;
+  padding-left: 0.75rem;
+  color: #94a3b8;
+}
+
+.profile-bio code {
+  border-radius: 0.25rem;
+  background: #1e293b;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+}
+
+.profile-bio pre {
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: #1e293b;
+  padding: 0.75rem;
+}
+
+.profile-bio pre code { padding: 0; }
+.profile-bio hr { border-color: #334155; }
+.profile-bio img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+
 .bg-app {
   background:
     linear-gradient(180deg, rgba(7, 19, 26, 0.84), rgba(17, 24, 39, 0.92)),

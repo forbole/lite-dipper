@@ -1,7 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: fileURLToPath(new URL("./tests/e2e/global-setup.ts", import.meta.url)),
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,

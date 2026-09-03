@@ -1,17 +1,20 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Panel } from "../components/ui/Panel";
-import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
+import { ValidatorIdentity } from "../components/ui/ValidatorIdentity";
 import { useApiResource } from "../hooks/useApiResource";
 import { formatDateTime, formatNumber, truncateMiddle } from "../lib/format";
 import type { BlockSummary } from "../types/desmos";
+import { resolvePage } from "../seo/page";
 
 export function BlocksPage() {
-  const { data, error, loading } = useApiResource<BlockSummary[]>("/api/blocks?limit=20", {
-    pollMs: 15_000
+  const location = useLocation();
+  const route = resolvePage(location.pathname + location.search);
+  const { data, error, loading } = useApiResource<BlockSummary[]>(route.key, {
+    pollMs: route.before ? 0 : 15_000
   });
 
   return (
-    <Panel title="Blocks" subtitle="Recent blocks fetched from Desmos RPC">
+    <Panel title="Blocks" subtitle={route.before ? `Blocks before height ${formatNumber(route.before)}` : "Recent blocks fetched from Desmos RPC"}>
       {loading && !data ? <p className="text-sm text-slate-300">Loading blocks…</p> : null}
       {error && !data ? <p className="text-sm text-rose-200">{error}</p> : null}
       {data ? (
@@ -37,19 +40,12 @@ export function BlocksPage() {
                   <td className="py-3 pr-4 text-slate-200">{truncateMiddle(block.hash)}</td>
                   <td className="py-3 pr-4 text-slate-300">{formatDateTime(block.time)}</td>
                   <td className="py-3 pr-4 text-slate-300">
-                    <div className="flex items-center gap-3">
-                      <ValidatorAvatar
-                        identity={block.proposerIdentity}
-                        moniker={block.proposerMoniker || truncateMiddle(block.proposerAddress)}
-                        size="sm"
-                      />
-                      <div>
-                        <div>{block.proposerMoniker || truncateMiddle(block.proposerAddress)}</div>
-                        {block.proposerMoniker ? (
-                          <div className="mt-1 text-xs text-slate-500">{truncateMiddle(block.proposerAddress)}</div>
-                        ) : null}
-                      </div>
-                    </div>
+                    <ValidatorIdentity
+                      operatorAddress={block.proposerOperatorAddress ?? ""}
+                      displayAddress={block.proposerAddress}
+                      identity={block.proposerIdentity}
+                      moniker={block.proposerMoniker}
+                    />
                   </td>
                   <td className="py-3 pr-4 text-slate-300">{formatNumber(block.txCount)}</td>
                 </tr>
@@ -58,6 +54,12 @@ export function BlocksPage() {
           </table>
         </div>
       ) : null}
+      <nav aria-label="Block pagination" className="mt-5 flex justify-between text-sm text-sky-200">
+        {route.before ? <Link to="/blocks" className="hover:text-white">Latest blocks</Link> : <span />}
+        {data?.length && data.at(-1)!.height > 1 ? (
+          <Link to={`/blocks?before=${data.at(-1)!.height}`} className="hover:text-white">Older blocks →</Link>
+        ) : null}
+      </nav>
     </Panel>
   );
 }

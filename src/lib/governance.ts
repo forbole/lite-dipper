@@ -1,4 +1,5 @@
 import { DESMOS_CHAIN } from "../config/chain";
+import { HttpError } from "./httpError";
 import type { ProposalDetailsPayload, ProposalSummary, ProposalTally } from "../types/desmos";
 
 interface RestMessage {
@@ -24,15 +25,15 @@ interface RestProposal {
   final_tally_result?: Record<string, unknown>;
 }
 
-async function governanceGet<T>(path: string): Promise<T> {
-  const response = await fetch(new URL(path, DESMOS_CHAIN.restUrl), {
+async function governanceGet<T>(path: string, restUrl: string = DESMOS_CHAIN.restUrl): Promise<T> {
+  const response = await fetch(new URL(path, restUrl), {
     headers: { Accept: "application/json" },
     cache: "no-store",
     signal: AbortSignal.timeout(15_000)
   });
 
   if (!response.ok) {
-    throw new Error(`Desmos governance API returned HTTP ${response.status}.`);
+    throw new HttpError(response.status, `Desmos governance API returned HTTP ${response.status}.`);
   }
 
   return (await response.json()) as T;
@@ -68,20 +69,20 @@ function extractTally(source?: Record<string, unknown>): ProposalTally | undefin
   return { yes: values[0], no: values[1], abstain: values[2], noWithVeto: values[3] };
 }
 
-export async function getProposals(): Promise<ProposalSummary[]> {
+export async function getProposals(_path?: string, restUrl: string = DESMOS_CHAIN.restUrl): Promise<ProposalSummary[]> {
   const response = await governanceGet<{ proposals: RestProposal[] }>(
-    "/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true"
+    "/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true", restUrl
   );
   return response.proposals.map(normalizeProposal);
 }
 
-export async function getProposalDetails(proposalId: string): Promise<ProposalDetailsPayload> {
+export async function getProposalDetails(proposalId: string, restUrl: string = DESMOS_CHAIN.restUrl): Promise<ProposalDetailsPayload> {
   if (!/^[1-9]\d*$/.test(proposalId)) {
     throw new Error("Invalid proposal id.");
   }
 
   const path = `/cosmos/gov/v1/proposals/${proposalId}`;
-  const { proposal } = await governanceGet<{ proposal: RestProposal }>(path);
+  const { proposal } = await governanceGet<{ proposal: RestProposal }>(path, restUrl);
   const isVoting = proposal.status === "PROPOSAL_STATUS_VOTING_PERIOD";
   const isFinal = ["PROPOSAL_STATUS_PASSED", "PROPOSAL_STATUS_REJECTED", "PROPOSAL_STATUS_FAILED"]
     .includes(proposal.status);
@@ -92,7 +93,7 @@ export async function getProposalDetails(proposalId: string): Promise<ProposalDe
     try {
       // final_tally_result remains zero during voting. Query the chain's live
       // stake-weighted tally; counting vote transactions would be incorrect.
-      const response = await governanceGet<{ tally: Record<string, unknown> }>(`${path}/tally`);
+      const response = await governanceGet<{ tally: Record<string, unknown> }>(`${path}/tally`, restUrl);
       tally = extractTally(response.tally);
       if (!tally) throw new Error("The API returned an incomplete tally.");
     } catch (error) {
