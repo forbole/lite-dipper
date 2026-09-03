@@ -4,7 +4,7 @@ import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { Panel } from "../components/ui/Panel";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { DESMOS_CHAIN } from "../config/chain";
-import { useApiResource } from "../hooks/useApiResource";
+import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
   formatDateTime,
   formatFixedDsmFromMicro,
@@ -15,7 +15,6 @@ import {
   parseDsmToMicro,
   truncateMiddle
 } from "../lib/format";
-import type { WalletOverviewPayload } from "../types/desmos";
 import { useWallet } from "../wallet/WalletProvider";
 
 type WalletRoute = "native" | "ibc";
@@ -40,13 +39,7 @@ export function WalletPage() {
     withdrawRewards,
     transferToOsmosis
   } = useWallet();
-  const { data, loading, refresh } = useApiResource<WalletOverviewPayload>(
-    connection ? `/api/wallet/${connection.address}/overview` : "/api/config",
-    {
-      enabled: Boolean(connection),
-      pollMs: 20_000
-    }
-  );
+  const { data, loading, error: overviewError, refresh } = useWalletOverview(connection?.address);
   const [route, setRoute] = useState<WalletRoute>("native");
   const [recipient, setRecipient] = useState("");
   const [amountDsm, setAmountDsm] = useState("");
@@ -344,6 +337,14 @@ export function WalletPage() {
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="space-y-6">
         <Panel title="Wallet Overview" subtitle="Balances and staking positions">
+          {overviewError ? (
+            <div role="alert" className="mb-4 text-sm text-amber-200">
+              <p>{data ? "Unable to refresh wallet balances and rewards. Displayed amounts may be out of date." : "Unable to load wallet balances and rewards."}</p>
+              <button type="button" onClick={refresh} disabled={loading} className="mt-2 underline disabled:opacity-60">
+                Retry wallet refresh
+              </button>
+            </div>
+          ) : null}
           {connection && loading && !data ? <p className="text-sm text-slate-300">Loading wallet state…</p> : null}
           {connection && data ? (
             <div className="space-y-4">

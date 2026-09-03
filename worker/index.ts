@@ -236,7 +236,7 @@ function getCacheTtl(pathname: string): number {
   }
 
   if (pathname.startsWith("/api/wallet/")) {
-    return 12;
+    return 0;
   }
 
   if (pathname.startsWith("/api/accounts/")) {
@@ -252,7 +252,15 @@ async function withCache(
   ttl: number,
   loader: () => Promise<Response>
 ) {
-  if (request.method !== "GET" || ttl <= 0) {
+  if (ttl <= 0) {
+    // Wallet reads must bypass existing edge entries and browser caches after
+    // transaction confirmation, including entries from previous deployments.
+    const response = await loader();
+    response.headers.set("cache-control", "no-store");
+    return response;
+  }
+
+  if (request.method !== "GET") {
     return loader();
   }
 
@@ -295,14 +303,14 @@ async function fetchRpcJson(env: Env, path: string, search?: Record<string, stri
   return fetchJson(url);
 }
 
-async function fetchRestJson(env: Env, path: string, search?: Array<[string, string]>) {
+async function fetchRestJson(env: Env, path: string, search?: Array<[string, string]>, init?: RequestInit) {
   const url = new URL(path, `${trimTrailingSlash(env.DESMOS_REST_URL)}/`);
 
   (search ?? []).forEach(([key, value]) => {
     url.searchParams.append(key, value);
   });
 
-  return fetchJson(url);
+  return fetchJson(url, init);
 }
 
 async function fetchTransactionPayloadByHash(env: Env, hash: string) {
@@ -762,13 +770,14 @@ async function getValidatorDetails(env: Env, validatorAddress: string) {
 
 async function getWalletOverview(env: Env, address: string) {
   const validatorDirectoryPromise = getValidatorDirectory(env);
+  const fetchWalletState = (path: string) => fetchRestJson(env, path, undefined, { cache: "no-store" });
   const [balancesResponse, delegationsResponse, unbondingDelegationsResponse, redelegationsResponse, rewardsResponse] =
     await Promise.all([
-      fetchRestJson(env, `/cosmos/bank/v1beta1/balances/${address}`),
-      fetchRestJson(env, `/cosmos/staking/v1beta1/delegations/${address}`),
-      fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/unbonding_delegations`),
-      fetchRestJson(env, `/cosmos/staking/v1beta1/delegators/${address}/redelegations`),
-      fetchRestJson(env, `/cosmos/distribution/v1beta1/delegators/${address}/rewards`)
+      fetchWalletState(`/cosmos/bank/v1beta1/balances/${address}`),
+      fetchWalletState(`/cosmos/staking/v1beta1/delegations/${address}`),
+      fetchWalletState(`/cosmos/staking/v1beta1/delegators/${address}/unbonding_delegations`),
+      fetchWalletState(`/cosmos/staking/v1beta1/delegators/${address}/redelegations`),
+      fetchWalletState(`/cosmos/distribution/v1beta1/delegators/${address}/rewards`)
     ]);
   const validatorDirectory = await validatorDirectoryPromise;
   const rewardsByValidator = new Map<string, string>(
@@ -1086,7 +1095,7 @@ export default {
       }
 
       if (url.pathname.startsWith("/api/")) {
-        return withCache(request, ctx, getCacheTtl(url.pathname), () => handleApi(request, env));
+        return await withCache(request, ctx, getCacheTtl(url.pathname), () => handleApi(request, env));
       }
 
       return handleAssetOrSpa(request, env);

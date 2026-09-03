@@ -4,6 +4,7 @@ import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
 import { ValidatorAvatar } from "../components/ui/ValidatorAvatar";
 import { useApiResource } from "../hooks/useApiResource";
+import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
   formatBondStatus,
   formatDateTime,
@@ -14,7 +15,7 @@ import {
   parseDsmToMicro,
   truncateMiddle
 } from "../lib/format";
-import type { ValidatorDetailsPayload, ValidatorSummary, WalletOverviewPayload } from "../types/desmos";
+import type { ValidatorDetailsPayload, ValidatorSummary } from "../types/desmos";
 import { useWallet } from "../wallet/WalletProvider";
 import { useParams } from "react-router-dom";
 
@@ -34,14 +35,9 @@ export function ValidatorDetailsPage() {
   const {
     data: walletOverview,
     loading: walletOverviewLoading,
+    error: walletOverviewError,
     refresh: refreshWalletOverview
-  } = useApiResource<WalletOverviewPayload>(
-    connection ? `/api/wallet/${connection.address}/overview` : "/api/config",
-    {
-      enabled: Boolean(connection),
-      pollMs: 20_000
-    }
-  );
+  } = useWalletOverview(connection?.address);
   const {
     data: validatorOptions,
     loading: validatorOptionsLoading
@@ -308,6 +304,14 @@ export function ValidatorDetailsPage() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
               <p className="text-sm text-slate-400">Wallet Delegation</p>
+              {walletOverviewError ? (
+                <div role="alert" className="mt-2 text-amber-200">
+                  <p>Unable to refresh wallet balances and delegations. Displayed amounts may be out of date.</p>
+                  <button type="button" onClick={refreshWalletOverview} disabled={walletOverviewLoading} className="mt-2 underline disabled:opacity-60">
+                    Retry wallet refresh
+                  </button>
+                </div>
+              ) : null}
               {walletOverviewLoading && !walletOverview ? (
                 <p className="mt-2">Loading connected wallet delegation…</p>
               ) : hasCurrentDelegation ? (
