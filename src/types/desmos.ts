@@ -124,6 +124,16 @@ export interface TransactionDetailsPayload {
   }>;
 }
 
+export interface DesmosProfile {
+  address: string;
+  dtag: string;
+  nickname: string;
+  bio: string;
+  profilePicture: string;
+  coverPicture: string;
+  creationDate: string;
+}
+
 export interface ValidatorDetailsPayload {
   validator: ValidatorSummary & {
     minSelfDelegation: string;
@@ -136,6 +146,7 @@ export interface ValidatorDetailsPayload {
     avatarUrl: string;
     profileUrl: string;
   } | null;
+  desmosProfile?: DesmosProfile | null;
 }
 
 export interface ProposalTally {

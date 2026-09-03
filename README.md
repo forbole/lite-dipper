@@ -26,10 +26,13 @@ The `DESMOS_GRPC_URL` variable is included in the config, but the current scaffo
 
 - `pnpm dev`: run the Vite frontend
 - `pnpm build`: typecheck and build the SPA
+- `pnpm preview`: build and serve the frontend, Worker API and RPC proxy at `http://127.0.0.1:4173` using live Desmos data
 - `pnpm test:e2e`: build the SPA and run Playwright smoke tests
 - `pnpm test:e2e:headed`: run the same E2E suite in headed mode
 - `pnpm worker:dev`: run the Worker locally
 - `pnpm deploy`: build and deploy the Worker plus static assets
+
+Use `pnpm preview` to review the app locally with live validators, profiles and wallet data. Vite alone serves the frontend without the `/api/*` or `/rpc` handlers. The `preview:e2e` script remains a static Vite preview for tests that mock those endpoints.
 
 ## E2E Testing
 

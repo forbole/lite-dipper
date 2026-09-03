@@ -51,6 +51,7 @@ export function ValidatorDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [txResult, setTxResult] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
+  const [failedCoverUrl, setFailedCoverUrl] = useState<string | null>(null);
   const currentDelegation = walletOverview?.delegations.find(
     (delegation) => delegation.validatorAddress === validatorAddress
   );
@@ -198,26 +199,47 @@ export function ValidatorDetailsPage() {
     return null;
   }
 
+  const profile = data.desmosProfile;
+  const displayName = profile?.nickname || data.validator.moniker;
+  const coverUrl = profile?.coverPicture;
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <Panel title={data.validator.moniker} subtitle={truncateMiddle(data.validator.operatorAddress)}>
-        <div className="mb-4 flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-950/45 p-4 md:flex-row md:items-center">
-          <ValidatorAvatar identity={data.validator.identity} moniker={data.validator.moniker} size="lg" />
+      <Panel title={displayName} subtitle={truncateMiddle(data.validator.operatorAddress)}>
+        <div className="mb-4 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/45">
+          {coverUrl && failedCoverUrl !== coverUrl ? (
+            <img
+              src={coverUrl}
+              alt={`${displayName} cover`}
+              className="h-36 w-full object-cover md:h-48"
+              referrerPolicy="no-referrer"
+              onError={() => setFailedCoverUrl(coverUrl)}
+            />
+          ) : null}
+          <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
+            <ValidatorAvatar identity={data.validator.identity} imageUrl={profile?.profilePicture} moniker={displayName} size="lg" />
 
-          <div className="min-w-0">
-            <p className="font-display text-2xl text-white">{data.validator.moniker}</p>
-            {data.keybaseProfile ? (
-              <a
-                href={data.keybaseProfile.profileUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex text-sm text-sky-200 transition hover:text-white"
-              >
-                Keybase: {data.keybaseProfile.username}
-              </a>
-            ) : data.validator.identity ? (
-              <p className="mt-2 text-sm text-slate-300">Keybase identity: {data.validator.identity}</p>
-            ) : null}
+            <div className="min-w-0">
+              <p className="break-words font-display text-2xl text-white">{displayName}</p>
+              {profile ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-2 py-0.5 text-xs text-sky-200">Desmos Profile</span>
+                  <span className="break-all text-slate-300">@{profile.dtag}</span>
+                </div>
+              ) : null}
+              {data.keybaseProfile ? (
+                <a
+                  href={data.keybaseProfile.profileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex text-sm text-sky-200 transition hover:text-white"
+                >
+                  Keybase: {data.keybaseProfile.username}
+                </a>
+              ) : data.validator.identity ? (
+                <p className="mt-2 text-sm text-slate-300">Keybase identity: {data.validator.identity}</p>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -244,13 +266,15 @@ export function ValidatorDetailsPage() {
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
-            <p className="text-sm text-slate-400">Details</p>
-            <p className="mt-2">{data.validator.details || "No validator details provided."}</p>
+            <p className="text-sm text-slate-400">{profile?.bio ? "Bio" : "Details"}</p>
+            <p className="mt-2 whitespace-pre-wrap break-words">{profile?.bio || data.validator.details || "No validator details provided."}</p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-sm text-slate-300">
             <p className="text-sm text-slate-400">Metadata</p>
             <div className="mt-2 space-y-2">
+              {displayName !== data.validator.moniker ? <p>Validator name: {data.validator.moniker}</p> : null}
+              {profile?.creationDate ? <p>Profile created: {formatDateTime(profile.creationDate)}</p> : null}
               <p>
                 Website:{" "}
                 {data.validator.website ? (

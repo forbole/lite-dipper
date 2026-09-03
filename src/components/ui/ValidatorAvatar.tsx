@@ -4,6 +4,7 @@ import { useState } from "react";
 
 interface ValidatorAvatarProps {
   identity?: string;
+  imageUrl?: string;
   moniker: string;
   size?: "sm" | "md" | "lg";
 }
@@ -26,28 +27,22 @@ function buildFallbackAvatarDataUri(seed: string): string {
   }).toDataUri();
 }
 
-export function ValidatorAvatar({ identity, moniker, size = "md" }: ValidatorAvatarProps) {
-  const [failed, setFailed] = useState(false);
+export function ValidatorAvatar({ identity, imageUrl, moniker, size = "md" }: ValidatorAvatarProps) {
+  const [failedSources, setFailedSources] = useState<string[]>([]);
   const className = `${SIZE_CLASS_MAP[size]} shrink-0 border border-white/10 object-cover`;
-
-  if (!identity || failed) {
-    return (
-      <img
-        src={buildFallbackAvatarDataUri(identity || moniker || "?")}
-        alt={`${moniker} avatar`}
-        className={className}
-        loading="lazy"
-      />
-    );
-  }
+  const source = [imageUrl, identity ? buildAvatarEndpoint(identity) : undefined]
+    .find((url): url is string => typeof url === "string" && url.length > 0 && !failedSources.includes(url));
 
   return (
     <img
-      src={buildAvatarEndpoint(identity)}
+      src={source || buildFallbackAvatarDataUri(identity || moniker || "?")}
       alt={`${moniker} avatar`}
       className={className}
       loading="lazy"
-      onError={() => setFailed(true)}
+      referrerPolicy="no-referrer"
+      onError={() => {
+        if (source) setFailedSources((previous) => [...previous, source]);
+      }}
     />
   );
 }

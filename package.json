@@ -18,7 +18,7 @@
     "preview:e2e": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "test:e2e": "pnpm build && playwright test",
     "test:e2e:headed": "pnpm build && playwright test --headed",
-    "preview": "vite preview",
+    "preview": "pnpm build && wrangler dev --local --ip 127.0.0.1 --port 4173",
     "worker:dev": "wrangler dev",
     "deploy": "pnpm build && wrangler deploy"
   },

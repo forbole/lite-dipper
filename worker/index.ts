@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { DesmosProfile } from "../src/types/desmos";
+
 interface Env {
   ASSETS: Fetcher;
   DESMOS_CHAIN_ID: string;
@@ -751,10 +753,53 @@ async function getTransactionDetails(env: Env, hash: string) {
   };
 }
 
+function profilePictureUrl(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+async function fetchDesmosProfile(env: Env, address: string): Promise<DesmosProfile | null> {
+  if (!address) return null;
+  try {
+    const response = await fetchRestJson(env, `/desmos/profiles/v3/profiles/${encodeURIComponent(address)}`, undefined, {
+      signal: AbortSignal.timeout(5_000)
+    });
+    const profile = response?.profile;
+    const account = profile?.account;
+    // Profiles wrap the validator's signing account, which may be a vesting
+    // account. Never associate a profile by moniker, DTag or consensus address.
+    const profileAddress = account?.address ?? account?.base_account?.address ?? account?.base_vesting_account?.base_account?.address;
+    if (profileAddress !== address || typeof profile?.dtag !== "string" || !profile.dtag.trim()) return null;
+
+    return {
+      address,
+      dtag: profile.dtag.trim(),
+      nickname: typeof profile.nickname === "string" ? profile.nickname.trim() : "",
+      bio: typeof profile.bio === "string" ? profile.bio.trim() : "",
+      profilePicture: profilePictureUrl(profile.pictures?.profile),
+      coverPicture: profilePictureUrl(profile.pictures?.cover),
+      creationDate: typeof profile.creation_date === "string" && Number.isFinite(Date.parse(profile.creation_date))
+        ? profile.creation_date : ""
+    };
+  } catch {
+    // An absent profile or an unavailable optional query must not prevent staking.
+    return null;
+  }
+}
+
 async function getValidatorDetails(env: Env, validatorAddress: string) {
   const response = await fetchRestJson(env, `/cosmos/staking/v1beta1/validators/${validatorAddress}`);
   const validator = response?.validator ?? {};
   const normalizedValidator = await normalizeValidator(validator);
+  const [keybaseProfile, desmosProfile] = await Promise.all([
+    fetchKeybaseProfile(normalizedValidator.identity),
+    fetchDesmosProfile(env, normalizedValidator.accountAddress)
+  ]);
 
   return {
     validator: {
@@ -764,7 +809,8 @@ async function getValidatorDetails(env: Env, validatorAddress: string) {
       unbondingTime: validator?.unbonding_time ?? "",
       delegatorShares: validator?.delegator_shares ?? "0"
     },
-    keybaseProfile: await fetchKeybaseProfile(normalizedValidator.identity)
+    keybaseProfile,
+    desmosProfile
   };
 }
 
