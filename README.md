@@ -42,10 +42,22 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-The suite uses browser-side `/api/*` mocks so it stays deterministic and does not depend on live Desmos data while exercising the built SPA in a real browser.
+The suite mocks `/api/*` and the direct Desmos governance REST requests so it stays deterministic and does not depend on live Desmos data while exercising the built SPA in a real browser.
+
+## Governance without an indexer
+
+Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the browser. They work with static SPA hosting and do not use a Worker or transaction indexer for governance reads. The REST endpoint must allow browser requests through CORS; the default Desmos mainnet API does.
+
+- Latest 20 proposals: `/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true`
+- Proposal status and stored final result: `/cosmos/gov/v1/proposals/{id}`
+- Live, stake-weighted result during voting: `/cosmos/gov/v1/proposals/{id}/tally`
+
+Both views refresh every 30 seconds. Details also offer manual refresh and refresh after a successful vote. Active proposals always query `/tally`, because `final_tally_result` is a zero-filled placeholder until voting finishes. Completed proposals use the stored final result. Tally amounts are displayed in DSM with exact integer arithmetic; percentages are shares of total voted power including abstentions, not turnout or pass/fail predictions. Unavailable tallies and stale refreshes are shown explicitly.
+
+These are governance state queries, so transaction search/indexing is unnecessary. This does not provide a historical vote-change timeline. Other explorer views and wallet RPC proxying still use the existing Worker.
 
 ## Notes
 
 - The Worker serves static assets from `dist` and handles `/api/*` plus `/rpc*`.
-- Explorer reads are normalized in the Worker, so the frontend does not have to deal with raw Cosmos payloads on every page.
+- Governance reads are normalized in the frontend; other explorer reads are normalized in the Worker.
 - Wallet transaction methods are scaffolded for send, staking and IBC transfer paths, but they still need live integration testing against Keplr and the Desmos Ledger app in a supported browser.

@@ -3,17 +3,19 @@ import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
 import { useApiResource } from "../hooks/useApiResource";
 import { formatDateTime, formatProposalStatus } from "../lib/format";
+import { getProposals } from "../lib/governance";
 import type { ProposalSummary } from "../types/desmos";
 
 export function ProposalsPage() {
-  const { data, error, loading } = useApiResource<ProposalSummary[]>("/api/proposals", {
-    pollMs: 60_000
+  const { data, error, loading } = useApiResource<ProposalSummary[]>("proposals", {
+    pollMs: 30_000,
+    fetcher: getProposals
   });
 
   return (
     <Panel title="Proposals" subtitle="Governance proposals from Desmos REST">
       {loading && !data ? <p className="text-sm text-slate-300">Loading proposals…</p> : null}
-      {error && !data ? <p className="text-sm text-rose-200">{error}</p> : null}
+      {error ? <p role="alert" className="mb-3 text-sm text-rose-200">{data ? "Unable to refresh; showing previously loaded proposals. " : ""}{error}</p> : null}
       {data ? (
         <div className="space-y-3">
           {data.map((proposal) => (

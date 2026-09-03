@@ -81,16 +81,17 @@ const VALIDATORS_PAYLOAD = [
   }
 ];
 
-const PROPOSALS_PAYLOAD = [
-  {
-    id: "17",
-    title: "Improve Desmos metadata indexing",
-    status: "PROPOSAL_STATUS_VOTING_PERIOD",
-    proposer: "desmos1proposer00000000000000000000000000000",
-    submitTime: "2026-03-17T10:00:00.000Z",
-    votingEndTime: "2026-03-20T10:00:00.000Z"
-  }
-];
+export const GOVERNANCE_PROPOSAL = {
+  id: "17",
+  title: "Improve Desmos metadata indexing",
+  status: "PROPOSAL_STATUS_VOTING_PERIOD",
+  proposer: "desmos1proposer00000000000000000000000000000",
+  submit_time: "2026-03-17T10:00:00.000Z",
+  voting_end_time: "2026-03-20T10:00:00.000Z",
+  summary: "Improve metadata access for Desmos applications.",
+  messages: [],
+  final_tally_result: { yes_count: "0", no_count: "0", abstain_count: "0", no_with_veto_count: "0" }
+};
 
 async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({
@@ -101,6 +102,10 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 export async function mockExplorerApi(page: Page) {
+  await page.route("https://api.mainnet.desmos.network/cosmos/gov/v1/proposals?*", async (route) => {
+    await fulfillJson(route, { proposals: [GOVERNANCE_PROPOSAL], pagination: { next_key: null } });
+  });
+
   await page.route("**/api/keybase/avatar/**", async (route) => {
     await route.fulfill({ status: 404 });
   });
@@ -120,9 +125,6 @@ export async function mockExplorerApi(page: Page) {
         return;
       case "/api/validators":
         await fulfillJson(route, VALIDATORS_PAYLOAD);
-        return;
-      case "/api/proposals":
-        await fulfillJson(route, PROPOSALS_PAYLOAD);
         return;
       default:
         await route.fulfill({

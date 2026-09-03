@@ -235,10 +235,6 @@ function getCacheTtl(pathname: string): number {
     return 30;
   }
 
-  if (pathname === "/api/proposals" || pathname.startsWith("/api/proposals/")) {
-    return 45;
-  }
-
   if (pathname.startsWith("/api/wallet/")) {
     return 12;
   }
@@ -568,48 +564,6 @@ async function normalizeValidator(validator: any): Promise<ValidatorRecord> {
   };
 }
 
-function extractProposalTitle(proposal: any): string {
-  if (proposal?.title) {
-    return proposal.title;
-  }
-
-  const firstMessage = proposal?.messages?.[0];
-
-  return (
-    firstMessage?.title ??
-    firstMessage?.content?.title ??
-    firstMessage?.plan?.name ??
-    proposal?.metadata ??
-    "Untitled proposal"
-  );
-}
-
-function extractProposalSummary(proposal: any): string {
-  if (proposal?.summary) {
-    return proposal.summary;
-  }
-
-  const firstMessage = proposal?.messages?.[0];
-
-  return (
-    firstMessage?.summary ??
-    firstMessage?.content?.description ??
-    firstMessage?.description ??
-    ""
-  );
-}
-
-function normalizeProposal(proposal: any) {
-  return {
-    id: proposal?.id ?? "",
-    title: extractProposalTitle(proposal),
-    status: proposal?.status ?? "STATUS_UNSPECIFIED",
-    proposer: proposal?.proposer ?? "",
-    submitTime: proposal?.submit_time ?? "",
-    votingEndTime: proposal?.voting_end_time ?? ""
-  };
-}
-
 function previewMessage(message: any): string {
   try {
     return JSON.stringify(message, null, 2);
@@ -803,69 +757,6 @@ async function getValidatorDetails(env: Env, validatorAddress: string) {
       delegatorShares: validator?.delegator_shares ?? "0"
     },
     keybaseProfile: await fetchKeybaseProfile(normalizedValidator.identity)
-  };
-}
-
-async function getProposals(env: Env) {
-  const response = await fetchRestJson(env, "/cosmos/gov/v1/proposals", [
-    ["pagination.limit", "20"],
-    ["pagination.reverse", "true"]
-  ]);
-
-  return (response?.proposals ?? []).map(normalizeProposal);
-}
-
-function extractProposalTally(source: any) {
-  if (!source) {
-    return undefined;
-  }
-
-  const yes = source?.yes_count ?? source?.yes;
-  const no = source?.no_count ?? source?.no;
-  const abstain = source?.abstain_count ?? source?.abstain;
-  const noWithVeto = source?.no_with_veto_count ?? source?.no_with_veto;
-
-  if ([yes, no, abstain, noWithVeto].every((value) => value == null)) {
-    return undefined;
-  }
-
-  return {
-    yes: yes ?? "0",
-    no: no ?? "0",
-    abstain: abstain ?? "0",
-    noWithVeto: noWithVeto ?? "0"
-  };
-}
-
-async function fetchProposalTally(env: Env, proposalId: string) {
-  try {
-    const response = await fetchRestJson(env, `/cosmos/gov/v1/proposals/${proposalId}/tally_result`);
-    return extractProposalTally(response?.tally);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-
-    if (message.includes("Upstream 501")) {
-      return undefined;
-    }
-
-    throw error;
-  }
-}
-
-async function getProposalDetails(env: Env, proposalId: string) {
-  const proposalResponse = await fetchRestJson(env, `/cosmos/gov/v1/proposals/${proposalId}`);
-  const proposal = proposalResponse?.proposal ?? {};
-  const finalTally = extractProposalTally(proposal?.final_tally_result) ?? (await fetchProposalTally(env, proposalId));
-
-  return {
-    proposal: {
-      ...normalizeProposal(proposal),
-      summary: extractProposalSummary(proposal),
-      metadata: proposal?.metadata ?? "",
-      expedited: Boolean(proposal?.expedited),
-      messages: (proposal?.messages ?? []).map((message: any) => message?.["@type"] ?? "Unknown"),
-      finalTally
-    }
   };
 }
 
@@ -1130,14 +1021,6 @@ async function handleApi(request: Request, env: Env) {
 
   if (segments[0] === "api" && segments[1] === "validators" && segments[2]) {
     return json(await getValidatorDetails(env, segments[2]));
-  }
-
-  if (url.pathname === "/api/proposals") {
-    return json(await getProposals(env));
-  }
-
-  if (segments[0] === "api" && segments[1] === "proposals" && segments[2]) {
-    return json(await getProposalDetails(env, segments[2]));
   }
 
   if (

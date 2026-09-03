@@ -5,6 +5,7 @@ interface UseApiResourceOptions<T> {
   enabled?: boolean;
   pollMs?: number;
   initialData?: T | null;
+  fetcher?: (path: string) => Promise<T>;
 }
 
 export function useApiResource<T>(
@@ -13,7 +14,12 @@ export function useApiResource<T>(
 ) {
   const enabled = options?.enabled ?? true;
   const pollMs = options?.pollMs ?? 0;
-  const [data, setData] = useState<T | null>(options?.initialData ?? null);
+  const fetcher = options?.fetcher ?? apiGet<T>;
+  const [resource, setResource] = useState<{ path: string; data: T | null }>({
+    path,
+    data: options?.initialData ?? null
+  });
+  const data = resource.path === path ? resource.data : null;
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -25,15 +31,18 @@ export function useApiResource<T>(
     }
 
     let cancelled = false;
+    let inFlight = false;
     let intervalId: number | undefined;
 
     const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         setLoading(true);
-        const nextData = await apiGet<T>(path);
+        const nextData = await fetcher(path);
 
         if (!cancelled) {
-          setData(nextData);
+          setResource({ path, data: nextData });
           setError(null);
         }
       } catch (nextError) {
@@ -41,6 +50,7 @@ export function useApiResource<T>(
           setError(nextError instanceof Error ? nextError.message : "Unknown error");
         }
       } finally {
+        inFlight = false;
         if (!cancelled) {
           setLoading(false);
         }
@@ -62,7 +72,7 @@ export function useApiResource<T>(
         window.clearInterval(intervalId);
       }
     };
-  }, [enabled, path, pollMs, reloadToken]);
+  }, [enabled, path, pollMs, reloadToken, fetcher]);
 
   return {
     data,

@@ -72,11 +72,11 @@ export function AppShell() {
     <div className="relative min-h-screen bg-app text-slate-100">
       <GalaxyBackground />
 
-      <div className="relative z-10 flex min-h-screen">
+      <div className="relative z-10 flex min-h-screen flex-col md:flex-row">
         <aside
           className={[
-            "border-r border-white/10 bg-slate-950/80 px-3 py-4 backdrop-blur transition-all duration-200",
-            collapsed ? "w-24" : "w-72"
+            "w-full shrink-0 border-b border-white/10 bg-slate-950/80 px-3 py-4 backdrop-blur transition-all duration-200 md:border-b-0 md:border-r",
+            collapsed ? "md:w-24" : "md:w-72"
           ].join(" ")}
         >
           <div className="mb-6 px-2">
@@ -98,15 +98,16 @@ export function AppShell() {
             </button>
           </div>
 
-          <nav className="space-y-2">
+          <nav className="grid grid-cols-3 gap-2 md:block md:space-y-2">
             {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
+                aria-label={item.label}
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   [
-                    "group flex items-center gap-3 rounded-2xl pl-6 pr-3 py-3 text-sm transition",
+                    "group flex items-center gap-2 rounded-2xl px-2 py-3 text-sm transition md:gap-3 md:pl-6 md:pr-3",
                     isActive
                       ? "bg-[linear-gradient(90deg,rgba(14,165,233,0.18),rgba(252,211,77,0.12))] text-white"
                       : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
@@ -143,7 +144,7 @@ export function AppShell() {
                 <p className="text-xs uppercase tracking-[0.24em] text-sky-200/80">Desmos Mainnet</p>
                 <h1 className="mt-2 font-display text-3xl text-white">{deriveHeading(location.pathname)}</h1>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
                   <span className="h-2 w-2 rounded-full bg-emerald-300" />
                   Explorer online: RPC & REST healthy

@@ -138,18 +138,23 @@ export interface ValidatorDetailsPayload {
   } | null;
 }
 
+export interface ProposalTally {
+  yes: string;
+  no: string;
+  abstain: string;
+  noWithVeto: string;
+}
+
 export interface ProposalDetailsPayload {
+  updatedAt: string;
   proposal: ProposalSummary & {
     summary: string;
     metadata: string;
     expedited: boolean;
     messages: string[];
-    finalTally?: {
-      yes: string;
-      no: string;
-      abstain: string;
-      noWithVeto: string;
-    };
+    tally?: ProposalTally;
+    tallyKind?: "live" | "final";
+    tallyError?: string;
   };
 }
 
