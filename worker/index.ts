@@ -6,6 +6,7 @@ import { getProposals, getProposalDetails } from "../src/lib/governance";
 import { getProposalVoteTransactions, proposalVotesKey } from "../src/lib/proposalVoteTransactions";
 import { resolvePage, type PageRoute, type PageSnapshot } from "../src/seo/page";
 import { renderDocument, renderSitemap } from "./seo";
+import { validatorPage } from "../src/lib/validatorPagination";
 
 interface Env {
   ASSETS: Fetcher;
@@ -428,25 +429,7 @@ async function getValidatorDirectory(env: Env): Promise<ValidatorDirectory> {
     return validatorDirectoryCache.directory;
   }
 
-  const response = await fetchRestJson(env, "/cosmos/staking/v1beta1/validators", [
-    ["status", "BOND_STATUS_BONDED"],
-    ["pagination.limit", "200"]
-  ]);
-  const validators = await Promise.all((response?.validators ?? []).map(normalizeValidator));
-  validators.sort((left, right) => {
-    const leftTokens = BigInt(left.tokens || "0");
-    const rightTokens = BigInt(right.tokens || "0");
-
-    if (rightTokens > leftTokens) {
-      return 1;
-    }
-
-    if (rightTokens < leftTokens) {
-      return -1;
-    }
-
-    return left.moniker.localeCompare(right.moniker);
-  });
+  const validators = await loadValidatorList(env, false);
   const directory: ValidatorDirectory = {
     validators,
     byOperatorAddress: new Map(),
@@ -664,8 +647,36 @@ function sortRpcSearchTransactions(left: any, right: any) {
   return rightIndex - leftIndex;
 }
 
-async function getValidators(env: Env) {
-  return (await getValidatorDirectory(env)).validators;
+async function loadValidatorList(env: Env, inactive: boolean): Promise<ValidatorRecord[]> {
+  const validators = new Map<string, ValidatorRecord>();
+  const seenKeys = new Set<string>();
+  let nextKey = "";
+  do {
+    const params: Array<[string, string]> = [["pagination.limit", "200"]];
+    // Jailed validators can have different bond statuses. Query the full
+    // registry for this view, keeping the shared active directory separate.
+    if (!inactive) params.push(["status", "BOND_STATUS_BONDED"]);
+    if (nextKey) params.push(["pagination.key", nextKey]);
+    const response = await fetchRestJson(env, "/cosmos/staking/v1beta1/validators", params);
+    if (!Array.isArray(response?.validators)) throw new HttpError(503, "Validator data is unavailable.");
+    const page = await Promise.all(response.validators.map(normalizeValidator));
+    for (const validator of page) {
+      const active = validator.status === "BOND_STATUS_BONDED" && !validator.jailed;
+      if (inactive ? !active : active) validators.set(validator.operatorAddress, validator);
+    }
+    nextKey = response.pagination?.next_key ?? "";
+    if (nextKey && seenKeys.has(nextKey)) throw new HttpError(503, "Unable to finish loading validators.");
+    if (nextKey) seenKeys.add(nextKey);
+  } while (nextKey);
+  return [...validators.values()].sort((left, right) => {
+    const leftTokens = BigInt(left.tokens || "0");
+    const rightTokens = BigInt(right.tokens || "0");
+    return rightTokens > leftTokens ? 1 : rightTokens < leftTokens ? -1 : left.moniker.localeCompare(right.moniker);
+  });
+}
+
+async function getValidators(env: Env, status = "active") {
+  return status === "inactive" ? loadValidatorList(env, true) : (await getValidatorDirectory(env)).validators;
 }
 
 async function getDashboard(env: Env) {
@@ -1112,7 +1123,9 @@ async function handleApi(request: Request, env: Env) {
   }
 
   if (url.pathname === "/api/validators") {
-    return json(await getValidators(env));
+    const status = url.searchParams.get("status") ?? "active";
+    if (!["active", "inactive"].includes(status)) return json({ error: "Invalid validator status." }, { status: 400 });
+    return json(await getValidators(env, status));
   }
 
   if (segments[0] === "api" && segments[1] === "validators" && segments[3] === "profile" && segments.length === 4) {
@@ -1175,7 +1188,13 @@ async function loadPublicPage(env: Env, route: PageRoute): Promise<PageSnapshot>
     let data: unknown;
     switch (route.kind) {
       case "home": data = await getDashboard(env); break;
-      case "validators": data = await getValidators(env); break;
+      case "validators": {
+        data = await getValidators(env, route.validatorStatus);
+        if ((route.validatorPage ?? 1) > 1 && validatorPage(data as ValidatorRecord[], route.validatorPage).length === 0) {
+          throw new HttpError(404, "Validator page not found.");
+        }
+        break;
+      }
       case "validator": {
         try { deriveAccountAddressFromOperatorAddress(route.id!); } catch { throw new HttpError(404, "Validator not found."); }
         data = await getValidatorDetails(env, route.id!); break;
@@ -1223,7 +1242,7 @@ async function loadPublicPage(env: Env, route: PageRoute): Promise<PageSnapshot>
         else if (typeof child === "object") collect(child);
       }
     }
-    collect(data);
+    collect(route.kind === "validators" ? validatorPage(data as ValidatorRecord[], route.validatorPage) : data);
     await Promise.all([...addresses].slice(0, 20).map(async (operator) => {
         const key = `/api/validators/${operator}/profile`;
         if (key in snapshot.resources) return;
@@ -1233,7 +1252,7 @@ async function loadPublicPage(env: Env, route: PageRoute): Promise<PageSnapshot>
     }));
     return snapshot;
   } catch (error) {
-    const detailPage = ["validator", "block", "transaction", "proposal", "account"].includes(route.kind);
+    const detailPage = ["validators", "validator", "block", "transaction", "proposal", "account"].includes(route.kind);
     const status = detailPage && error instanceof HttpError && [400, 404].includes(error.status) ? 404 : 503;
     return { path: route.path, resources: {}, status, errors: route.key ? { [route.key]: {
       status, message: status === 404 ? "The requested item was not found." : "Desmos data is temporarily unavailable. Please try again shortly."

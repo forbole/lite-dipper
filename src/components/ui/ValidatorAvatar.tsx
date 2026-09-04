@@ -1,6 +1,6 @@
 import { botttsNeutral } from "@dicebear/collection";
 import { createAvatar } from "@dicebear/core";
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 interface ValidatorAvatarProps {
   identity?: string;
@@ -27,15 +27,17 @@ function buildFallbackAvatarDataUri(seed: string): string {
   }).toDataUri();
 }
 
-export function ValidatorAvatar({ identity, imageUrl, moniker, size = "md" }: ValidatorAvatarProps) {
+export const ValidatorAvatar = memo(function ValidatorAvatar({ identity, imageUrl, moniker, size = "md" }: ValidatorAvatarProps) {
   const [failedSources, setFailedSources] = useState<string[]>([]);
   const className = `${SIZE_CLASS_MAP[size]} shrink-0 border border-white/10 object-cover`;
   const source = [imageUrl, identity ? buildAvatarEndpoint(identity) : undefined]
     .find((url): url is string => typeof url === "string" && url.length > 0 && !failedSources.includes(url));
+  const seed = identity || moniker || "?";
+  const fallback = useMemo(() => source ? undefined : buildFallbackAvatarDataUri(seed), [source, seed]);
 
   return (
     <img
-      src={source || buildFallbackAvatarDataUri(identity || moniker || "?")}
+      src={source || fallback}
       alt={`${moniker} avatar`}
       className={className}
       loading="lazy"
@@ -45,4 +47,4 @@ export function ValidatorAvatar({ identity, imageUrl, moniker, size = "md" }: Va
       }}
     />
   );
-}
+});

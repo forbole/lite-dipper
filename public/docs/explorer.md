@@ -5,7 +5,7 @@ Lite-Dipper explores the Desmos mainnet (`desmos-mainnet`). Public pages are ren
 ## Routes
 
 - `/`: Network overview and recent activity.
-- `/validators`: Active validators, voting power and commission.
+- `/validators`: Active validators by default. Use the selector to view jailed and inactive validators at `/validators?status=inactive`. Both views show 20 validators per page, with Previous/Next links, profiles, stake and commission, and refresh every 30 seconds.
 - `/validators/{desmosvaloper-address}`: Validator details and a Desmos Profile, when the validator's corresponding account has one.
 - `/blocks`: Latest blocks. Follow **Older blocks** to browse earlier heights.
 - `/blocks/{height}`: Block header, proposer, signing validators and available transactions.

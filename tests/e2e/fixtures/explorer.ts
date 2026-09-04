@@ -10,7 +10,7 @@ export const CONSENSUS = createHash("sha256").update(Buffer.alloc(32, 1)).digest
 export const UNKNOWN_CONSENSUS = "FF".repeat(20);
 export const INACTIVE_OPERATOR = "desmosvaloper1gupgnsfgvs08watwtfdl4a5r9589cus3f36mhz";
 export const INACTIVE_ACCOUNT = "desmos1gupgnsfgvs08watwtfdl4a5r9589cus3huj0as";
-const STAKING_VALIDATOR = {
+export const STAKING_VALIDATOR = {
   operator_address: OPERATOR, consensus_pubkey: { key: Buffer.alloc(32, 1).toString("base64") },
   description: { moniker: "Staking name", identity: IDENTITY, details: "Original staking description.",
     website: "https://validator.example", security_contact: "security@validator.example" },
@@ -43,6 +43,9 @@ type ProfileApi = {
   voteTransactionsStatus?: number;
   delegationAddresses?: string[];
   validatorResponses?: Record<string, { validator?: unknown; status?: number }>;
+  validatorPages?: Array<Array<typeof STAKING_VALIDATOR>>;
+  validatorListUnavailable?: boolean;
+  validatorListQueries: Array<{ status: string | null; key: string | null }>;
   latestHeight: number;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   profile: unknown;
@@ -57,7 +60,7 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
     // Playwright transforms JSX into component-test objects. Import a real
     // production React bundle so these tests exercise the Worker's SSR path.
     const worker: typeof workerType = (await import("../../../node_modules/.cache/lite-dipper-test-worker/worker.mjs")).default;
-    const state: ProfileApi = { profile: structuredClone(PROFILE), status: 200, brokenImages: false, requests: [], serveDocuments: false, unavailable: false, latestHeight: 3, request: async () => new Response() };
+    const state: ProfileApi = { profile: structuredClone(PROFILE), status: 200, brokenImages: false, requests: [], validatorListQueries: [], serveDocuments: false, unavailable: false, latestHeight: 3, request: async () => new Response() };
     const restOrigin = `https://validator-${randomUUID()}.test`;
     const cachedResponses = new Map<string, Response>();
     const originalFetch = globalThis.fetch;
@@ -91,7 +94,16 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
         return Response.json(state.transaction ?? { tx: { body: { memo: "Community transfer", messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend", from_address: ACCOUNT, to_address: INACTIVE_ACCOUNT, amount: [{ denom: "udsm", amount: "1000000" }] }] }, auth_info: { fee: { amount: [] } } },
           tx_response: { txhash: TX_HASH, height: "3", timestamp: "2026-09-03T12:00:00Z", code: 0, gas_used: "80000", gas_wanted: "100000", logs: [], events: [] } });
       }
-      if (url.pathname === "/cosmos/staking/v1beta1/validators") return Response.json({ validators: [STAKING_VALIDATOR] });
+      if (url.pathname === "/cosmos/staking/v1beta1/validators") {
+        const status = url.searchParams.get("status");
+        const key = url.searchParams.get("pagination.key");
+        state.validatorListQueries.push({ status, key });
+        if (state.validatorListUnavailable) return Response.json({ error: "Unavailable" }, { status: 503 });
+        const pages = state.validatorPages ?? [[STAKING_VALIDATOR]];
+        const index = key ? Number(key.replace("page-", "")) : 0;
+        return Response.json({ validators: (pages[index] ?? []).filter((validator) => !status || validator.status === status),
+          pagination: { next_key: index + 1 < pages.length ? `page-${index + 1}` : null } });
+      }
       if (url.pathname === `/cosmos/staking/v1beta1/validators/${OPERATOR}`) return Response.json({ validator: STAKING_VALIDATOR });
       if (url.pathname.startsWith("/cosmos/staking/v1beta1/validators/")) {
         const override = state.validatorResponses?.[url.pathname.split("/").at(-1)!];

@@ -1,4 +1,5 @@
 import type { AccountDetailsPayload, BlockDetailsPayload, ProposalDetailsPayload, TransactionDetailsPayload, ValidatorDetailsPayload } from "../types/desmos";
+import { validatorListPath } from "../lib/validatorPagination";
 
 export const SITE_ORIGIN = "https://lite.desmos.network";
 export const SITE_DESCRIPTION = "Explore Desmos validators, blocks, transactions, accounts and governance proposals. Connect Keplr or Ledger to manage DSM in your browser.";
@@ -10,7 +11,7 @@ export interface PageSnapshot {
   status?: number;
 }
 export type PageKind = "home" | "validators" | "validator" | "blocks" | "block" | "transactions" | "transaction" | "proposals" | "proposal" | "account" | "wallet" | "notfound";
-export interface PageRoute { kind: PageKind; path: string; key: string; id?: string; before?: number }
+export interface PageRoute { kind: PageKind; path: string; key: string; id?: string; before?: number; validatorStatus?: "active" | "inactive"; validatorPage?: number }
 
 export function resolvePage(input: string): PageRoute {
   const url = new URL(input, SITE_ORIGIN);
@@ -23,6 +24,14 @@ export function resolvePage(input: string): PageRoute {
   };
   if (list[path]) {
     const [kind, key] = list[path];
+    if (kind === "validators") {
+      const validatorStatus = url.searchParams.get("status") === "inactive" ? "inactive" : "active";
+      const page = url.searchParams.get("page") ?? "1";
+      if (!/^[1-9]\d*$/.test(page) || !Number.isSafeInteger(Number(page))) return { kind: "notfound", path, key: "" };
+      const validatorPage = Number(page);
+      const suffix = validatorStatus === "inactive" ? "?status=inactive" : "";
+      return { kind, path: validatorListPath(validatorStatus === "inactive", validatorPage), key: key + suffix, validatorStatus, validatorPage };
+    }
     const value = url.searchParams.get("before");
     if (kind === "blocks" && value !== null) {
       if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) <= 1) {
@@ -58,7 +67,9 @@ export interface PageMetadata { title: string; description: string; canonical: s
 export function pageMetadata(route: PageRoute, resources: Resources, status = 200): PageMetadata {
   const defaults: Record<PageKind, [string, string]> = {
     home: ["Desmos Blockchain Explorer", SITE_DESCRIPTION],
-    validators: ["Desmos Validators", "Compare active Desmos validators, voting power and commission rates. View validator profiles and delegate DSM."],
+    validators: route.validatorStatus === "inactive"
+      ? ["Jailed & Inactive Desmos Validators", "Browse jailed and inactive Desmos validators, their profiles, stake and commission rates."]
+      : ["Desmos Validators", "Compare active Desmos validators, voting power and commission rates. View validator profiles and delegate DSM."],
     validator: ["Desmos Validator", `Validator ${route.id ?? ""} on Desmos: profile, voting power, commission and delegation information.`],
     blocks: [route.before ? `Desmos Blocks Before ${route.before}` : "Desmos Blocks", "Browse finalized Desmos blocks, proposers, timestamps and transaction counts."],
     block: [`Desmos Block ${route.id}`, `Explore Desmos block ${route.id}, its proposer, signing validators and transactions.`],
@@ -71,6 +82,7 @@ export function pageMetadata(route: PageRoute, resources: Resources, status = 20
     notfound: ["Page Not Found", "The requested page could not be found on Lite-Dipper."]
   };
   let [label, description] = defaults[route.kind];
+  if (route.kind === "validators" && (route.validatorPage ?? 1) > 1) label += ` — Page ${route.validatorPage}`;
   let image = `${SITE_ORIGIN}/social-card.png`;
   const data = resources[route.key];
   if (route.kind === "validator" && data) {

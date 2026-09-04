@@ -12,6 +12,7 @@ type Star = {
 
 const STAR_COUNT = 48;
 const CONNECTION_DISTANCE = 150;
+const FRAME_INTERVAL = 1000 / 30;
 
 function createStar(width: number, height: number): Star {
   const depth = 0.35 + Math.random() * 0.9;
@@ -47,6 +48,7 @@ export function GalaxyBackground() {
     let animationFrame = 0;
     let width = 0;
     let height = 0;
+    let lastFrame = 0;
 
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -70,15 +72,10 @@ export function GalaxyBackground() {
           star.y = Math.min(Math.max(star.y, 0), height);
         }
       }
+      updateAnimation();
     };
 
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
-    resize();
-
-    const draw = () => {
-      const now = performance.now();
-
+    const draw = (now: number, elapsed: number) => {
       context.clearRect(0, 0, width, height);
 
       const glow = context.createRadialGradient(width * 0.55, height * 0.42, 0, width * 0.55, height * 0.42, width * 0.55);
@@ -91,8 +88,8 @@ export function GalaxyBackground() {
       for (const star of stars) {
         if (!mediaQuery.matches) {
           const speedMultiplier = 0.35 + star.depth * 0.9;
-          star.x += star.vx * speedMultiplier;
-          star.y += star.vy * speedMultiplier;
+          star.x += star.vx * speedMultiplier * elapsed;
+          star.y += star.vy * speedMultiplier * elapsed;
 
           if (star.x <= -12 || star.x >= width + 12) {
             star.vx *= -1;
@@ -190,19 +187,41 @@ export function GalaxyBackground() {
         context.fill();
       }
 
-      animationFrame = window.requestAnimationFrame(draw);
     };
 
-    animationFrame = window.requestAnimationFrame(draw);
+    const animate = (now: number) => {
+      if (document.hidden || mediaQuery.matches) return;
+      if (now - lastFrame >= FRAME_INTERVAL) {
+        draw(now, Math.min((now - lastFrame) / (1000 / 60), 3));
+        lastFrame = now;
+      }
+      animationFrame = window.requestAnimationFrame(animate);
+    };
+
+    function updateAnimation() {
+      window.cancelAnimationFrame(animationFrame);
+      if (document.hidden) return;
+      lastFrame = performance.now();
+      draw(mediaQuery.matches ? 0 : lastFrame, 0);
+      if (!mediaQuery.matches) animationFrame = window.requestAnimationFrame(animate);
+    }
+
+    const observer = new ResizeObserver(resize);
+    observer.observe(canvas);
+    resize();
+    mediaQuery.addEventListener("change", updateAnimation);
+    document.addEventListener("visibilitychange", updateAnimation);
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
       observer.disconnect();
+      mediaQuery.removeEventListener("change", updateAnimation);
+      document.removeEventListener("visibilitychange", updateAnimation);
     };
   }, []);
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div className="pointer-events-none fixed inset-0 overflow-hidden">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full opacity-90" aria-hidden="true" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(14,165,233,0.08),transparent_22%),radial-gradient(circle_at_80%_24%,rgba(252,211,77,0.07),transparent_20%),radial-gradient(circle_at_50%_72%,rgba(14,165,233,0.05),transparent_28%)]" />
     </div>
