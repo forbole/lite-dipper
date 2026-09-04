@@ -46,6 +46,8 @@ Names, biographies, images, links and proposal text are supplied by their author
 
 Keplr and Ledger connections and transaction signing run in the user's browser. Server-rendered pages start disconnected and do not contain a connected wallet session. Users approve transactions through their wallet or device. Account balances and delegation rewards refresh after a transaction is confirmed on chain.
 
+The Ledger address chooser shows each address's available DSM balance, excluding staked and locked tokens. Balances load independently and refresh every 20 seconds. You can select an address while its balance loads or retry a failed balance query without reconnecting the device.
+
 ## Source
 
 The implementation is available at [forbole/lite-dipper](https://github.com/forbole/lite-dipper).

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { Secp256k1 } from "@cosmjs/crypto";
 
 declare global {
@@ -27,9 +27,9 @@ test("Ledger reaches the device chooser and supports retry after cancellation", 
   await expect(page.getByRole("button", { name: /^Ledger/ })).toBeEnabled();
 });
 
-test("Ledger exchanges HID packets and loads Desmos account addresses", async ({ page }) => {
+async function mockLedgerDevice(page: Page) {
   // Public keys for deterministic test scalars. No real wallet or signer is used.
-  const publicKeys = await Promise.all(Array.from({ length: 10 }, async (_, index) => {
+  const publicKeys = await Promise.all(Array.from({ length: 40 }, async (_, index) => {
     const privateKey = new Uint8Array(32);
     privateKey[31] = index + 1;
     const { pubkey } = await Secp256k1.makeKeypair(privateKey);
@@ -63,7 +63,7 @@ test("Ledger exchanges HID packets and loads Desmos account addresses", async ({
           const pathData = new DataView(apdu.buffer, apdu.byteOffset + pathOffset, 20);
           const path = Array.from({ length: 5 }, (_, index) => pathData.getUint32(index * 4, true));
           window.ledgerTest.paths.push(path);
-          payload = publicKeys[path[4]];
+          payload = publicKeys[(path[2] - 0x80000000) * 20 + path[4]];
         } else {
           throw new Error(`Unexpected Ledger command: ${Array.from(apdu)}`);
         }
@@ -84,7 +84,13 @@ test("Ledger exchanges HID packets and loads Desmos account addresses", async ({
       }
     });
   }, { publicKeys });
+}
 
+const BALANCE_URL = "https://api.mainnet.desmos.network/cosmos/bank/v1beta1/spendable_balances/*/by_denom?denom=udsm";
+
+test("Ledger exchanges HID packets and loads Desmos account addresses", async ({ page }) => {
+  await mockLedgerDevice(page);
+  await page.route(BALANCE_URL, (route) => route.fulfill({ json: { balance: { denom: "udsm", amount: "0" } } }));
   await page.route("**/api/wallet/**/overview", (route) => route.fulfill({ json: {
     balances: [], delegations: [], unbondingDelegations: [], redelegations: [], totalRewardAmount: "0"
   } }));
@@ -103,4 +109,114 @@ test("Ledger exchanges HID packets and loads Desmos account addresses", async ({
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.ledgerTest.closes)).toBe(1);
   expect(errors).toEqual([]);
+});
+
+function addressRow(page: Page, index: number) {
+  return page.getByText(`Address index ${index}`, { exact: true }).locator("..").locator("..");
+}
+
+test("Ledger shows exact spendable DSM, isolates failures and refreshes balances", async ({ page }) => {
+  await mockLedgerDevice(page);
+  await page.clock.install();
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => { release = resolve; });
+  const amounts = new Map<string, string>();
+  const invalid = new Set<string>();
+  const unavailable = new Set<string>();
+  const requests: string[] = [];
+  await page.route(BALANCE_URL, async (route) => {
+    const address = new URL(route.request().url()).pathname.split("/").at(-2)!;
+    requests.push(address);
+    await ready;
+    if (unavailable.has(address)) return route.fulfill({ status: 503, json: { error: "Unavailable" } });
+    const balance = invalid.has(address) ? { denom: "other", amount: "wrong" } : { denom: "udsm", amount: amounts.get(address) ?? "0" };
+    return route.fulfill({ json: { balance } });
+  });
+  await page.goto("/wallet");
+  await page.getByRole("button", { name: /^Ledger/ }).click();
+  await expect(page.getByText("Loading balance…", { exact: true })).toHaveCount(10);
+  await expect(addressRow(page, 0).getByRole("button", { name: "Use this address" })).toBeEnabled();
+  const addresses = await page.getByText(/^desmos1[a-z0-9]+$/).allTextContents();
+  amounts.set(addresses[0], "1234567890");
+  amounts.set(addresses[2], "1");
+  amounts.set(addresses[3], "9007199254740993000001");
+  invalid.add(addresses[4]);
+  unavailable.add(addresses[5]);
+  release();
+  await expect(addressRow(page, 0)).toContainText("1,234.567890 DSM");
+  await expect(addressRow(page, 1)).toContainText("0.000000 DSM");
+  await expect(addressRow(page, 2)).toContainText("0.000001 DSM");
+  await expect(addressRow(page, 3)).toContainText("9,007,199,254,740,993.000001 DSM");
+  for (const index of [4, 5]) {
+    await expect(addressRow(page, index)).toContainText("Balance unavailable");
+    await expect(addressRow(page, index)).not.toContainText("0.000000 DSM");
+    await expect(addressRow(page, index).getByRole("button", { name: "Use this address" })).toBeEnabled();
+  }
+  expect(new Set(requests)).toEqual(new Set(addresses));
+  invalid.delete(addresses[4]);
+  amounts.set(addresses[4], "5000000");
+  await addressRow(page, 4).getByRole("button", { name: "Retry balance" }).click();
+  await expect(addressRow(page, 4)).toContainText("5.000000 DSM");
+
+  unavailable.add(addresses[0]);
+  await page.clock.fastForward(20_000);
+  await expect(addressRow(page, 0)).toContainText("Update failed; balance may be out of date.");
+  await expect(addressRow(page, 0)).toContainText("1,234.567890 DSM");
+  unavailable.delete(addresses[0]);
+  amounts.set(addresses[0], "7654321");
+  await page.clock.fastForward(20_000);
+  await expect(addressRow(page, 0)).toContainText("7.654321 DSM");
+  await expect(addressRow(page, 0)).not.toContainText("Update failed");
+});
+
+test("Ledger page and account changes keep balances with their addresses and can connect while loading", async ({ page }) => {
+  await mockLedgerDevice(page);
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => { release = resolve; });
+  const previousAddresses = new Set<string>();
+  let balance = "1000000";
+  let hold = true;
+  await page.route(BALANCE_URL, async (route) => {
+    const address = new URL(route.request().url()).pathname.split("/").at(-2)!;
+    if (hold) {
+      previousAddresses.add(address);
+      await ready;
+    }
+    await route.fulfill({ json: { balance: { denom: "udsm", amount: previousAddresses.has(address) ? "99000000" : balance } } });
+  });
+  await page.route("**/api/wallet/**/overview", (route) => route.fulfill({ json: {
+    balances: [], delegations: [], unbondingDelegations: [], redelegations: [], totalRewardAmount: "0"
+  } }));
+  await page.goto("/wallet");
+  await page.getByRole("button", { name: /^Ledger/ }).click();
+  await expect.poll(() => previousAddresses.size).toBe(10);
+  const firstAddress = await addressRow(page, 0).getByText(/^desmos1/).textContent();
+  hold = false;
+  await page.getByRole("button", { name: "Next 10", exact: true }).click();
+  await expect(addressRow(page, 10)).toContainText("m/44'/852'/0'/0/10");
+  await expect(addressRow(page, 10)).toContainText("1.000000 DSM");
+  release();
+  await expect(page.getByText(firstAddress!, { exact: true })).toHaveCount(0);
+  await expect(page.getByText("99.000000 DSM", { exact: true })).toHaveCount(0);
+
+  balance = "2000000";
+  await page.getByRole("button", { name: "Next account", exact: true }).click();
+  await expect(addressRow(page, 0)).toContainText("m/44'/852'/1'/0/0");
+  await expect(addressRow(page, 0)).toContainText("2.000000 DSM");
+  await expect(page.getByText(firstAddress!, { exact: true })).toHaveCount(0);
+
+  // The next page's balance requests remain pending while address selection
+  // completes; only the HID address derivation gates the connection button.
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => { finish = resolve; });
+  await page.route(BALANCE_URL, async (route) => {
+    await pending;
+    await route.fulfill({ json: { balance: { denom: "udsm", amount: "0" } } });
+  });
+  await page.getByRole("button", { name: "Next 10", exact: true }).click();
+  await expect(addressRow(page, 10)).toContainText("m/44'/852'/1'/0/10");
+  await expect(page.getByText("Loading balance…", { exact: true })).toHaveCount(10);
+  await addressRow(page, 10).getByRole("button", { name: "Use this address" }).click();
+  await expect(page.getByText("Ledger connected", { exact: true })).toBeVisible();
+  finish();
 });

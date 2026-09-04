@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { CopyIconButton } from "../components/ui/CopyIconButton";
 import { Panel } from "../components/ui/Panel";
 import { ValidatorIdentity } from "../components/ui/ValidatorIdentity";
+import { LedgerAddressBalance } from "../components/wallet/LedgerAddressBalance";
 import { DESMOS_CHAIN } from "../config/chain";
 import { useWalletOverview } from "../hooks/useWalletOverview";
 import {
@@ -224,6 +225,7 @@ export function WalletPage() {
                 <p className="mt-1 text-xs text-slate-400">
                   Account {ledgerSelection.accountNumber} · page {ledgerSelection.page + 1} · showing 10 addresses
                 </p>
+                <p className="mt-1 text-xs text-slate-400">Available DSM excludes staked and locked tokens.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
@@ -292,6 +294,7 @@ export function WalletPage() {
                       </p>
                       <p className="mt-2 break-all text-sm text-white">{account.address}</p>
                       <p className="mt-1 text-xs text-slate-400">{account.hdPath}</p>
+                      <LedgerAddressBalance address={account.address} />
                     </div>
                     <button
                       type="button"

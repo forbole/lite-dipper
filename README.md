@@ -87,4 +87,5 @@ The list links transactions, voters and blocks, supports v1/v1beta1 standard and
 
 - The Worker renders public routes, serves static assets from `dist`, and handles `/api/*` plus `/rpc*`.
 - Governance normalization is shared by the browser and Worker; other explorer reads are normalized in the Worker.
+- The Ledger address chooser queries spendable DSM directly from `/cosmos/bank/v1beta1/spendable_balances/{address}/by_denom?denom=udsm`. Each address loads independently and refreshes every 20 seconds, with exact six-decimal amounts, loading/error states and retry. Staked and locked tokens are excluded, and balance requests never gate address selection.
 - Wallet transaction methods are scaffolded for send, staking and IBC transfer paths, but they still need live integration testing against Keplr and the Desmos Ledger app in a supported browser.
