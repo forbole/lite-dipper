@@ -34,6 +34,8 @@ The four options use matching colors in the tally cards and participation bar. L
 
 Completed proposals only show shares of votes cast. Their final tally does not include the bonded total at voting end, and today's bonded power would misrepresent historical participation. Percentages measure stake-weighted power, not voter counts. These state queries do not require transaction indexing and do not provide a historical vote-change timeline.
 
+Recent vote transactions appear below the voting controls, with links to each transaction, voter and block. The browser queries `/cosmos/tx/v1beta1/txs` for `proposal_vote.proposal_id='{id}'`, using descending order and a limit of ten. This optional history uses the node's existing transaction index; it adds no separate indexer. If transaction search is unavailable, the tally remains available. Standard, weighted and authz-wrapped vote messages are filtered to the proposal, with a compact preview of up to three messages per transaction. Failed transactions are marked explicitly. Recent submissions are not current ballots: voters can change their votes, transaction counts are not voting power, and the node may retain only part of the history.
+
 ## Validator profiles
 
 Profile association uses the account derived from the validator's operator address, not a matching name or consensus address. A profile nickname and avatar take precedence when present; staking metadata and fallback avatars remain available. A profile does not alter the validator's on-chain operator identity, voting power or commission.

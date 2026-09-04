@@ -3,6 +3,7 @@
 import type { DesmosProfile } from "../src/types/desmos";
 import { HttpError } from "../src/lib/httpError";
 import { getProposals, getProposalDetails } from "../src/lib/governance";
+import { getProposalVoteTransactions, proposalVotesKey } from "../src/lib/proposalVoteTransactions";
 import { resolvePage, type PageRoute, type PageSnapshot } from "../src/seo/page";
 import { renderDocument, renderSitemap } from "./seo";
 
@@ -1181,7 +1182,20 @@ async function loadPublicPage(env: Env, route: PageRoute): Promise<PageSnapshot>
       case "transactions": data = await getRecentTransactions(env, 20); break;
       case "transaction": data = await getTransactionDetails(env, route.id!); break;
       case "proposals": data = await getProposals(undefined, env.DESMOS_REST_URL); break;
-      case "proposal": data = await getProposalDetails(route.id!, env.DESMOS_REST_URL); break;
+      case "proposal": {
+        const [proposal, votes] = await Promise.allSettled([
+          getProposalDetails(route.id!, env.DESMOS_REST_URL),
+          // Vote history is optional. Keep slow/disabled transaction search
+          // from turning otherwise available proposal HTML into an error page.
+          getProposalVoteTransactions(route.id!, env.DESMOS_REST_URL, 2_000)
+        ]);
+        if (proposal.status === "rejected") throw proposal.reason;
+        data = proposal.value;
+        const key = proposalVotesKey(route.id!);
+        if (votes.status === "fulfilled") snapshot.resources[key] = votes.value;
+        else snapshot.errors = { [key]: { status: 503, message: "Vote transaction search is temporarily unavailable." } };
+        break;
+      }
       case "account": {
         try { decodeBech32(route.id!); } catch { throw new HttpError(404, "Account not found."); }
         data = await getAccountDetails(env, route.id!); break;

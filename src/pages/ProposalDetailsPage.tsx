@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
 import { ProposalVotingProgress, VOTE_OPTIONS } from "../components/governance/ProposalVotingProgress";
+import { ProposalVoteTransactions } from "../components/governance/ProposalVoteTransactions";
 import { useApiResource } from "../hooks/useApiResource";
 import { formatDateTime, formatPreciseDsmFromMicro, formatProposalStatus } from "../lib/format";
 import { getProposalDetails, tallyPercentage } from "../lib/governance";
-import type { ProposalDetailsPayload } from "../types/desmos";
+import { getProposalVoteTransactions, proposalVotesKey } from "../lib/proposalVoteTransactions";
+import type { ProposalDetailsPayload, ProposalVoteTransactionsPayload } from "../types/desmos";
 import type { ProposalVoteOption } from "../wallet/types";
 import { useWallet } from "../wallet/context";
 import { useParams } from "react-router-dom";
@@ -18,6 +20,10 @@ export function ProposalDetailsPage() {
     enabled: Boolean(proposalId),
     pollMs: 30_000,
     fetcher: getProposalDetails
+  });
+  const fetchVoteTransactions = useCallback(() => getProposalVoteTransactions(proposalId ?? ""), [proposalId]);
+  const voteTransactions = useApiResource<ProposalVoteTransactionsPayload>(proposalVotesKey(proposalId ?? ""), {
+    enabled: Boolean(proposalId), pollMs: 30_000, fetcher: fetchVoteTransactions
   });
   const [voteOption, setVoteOption] = useState<ProposalVoteOption>("yes");
   const [submittingVote, setSubmittingVote] = useState(false);
@@ -62,6 +68,7 @@ export function ProposalDetailsPage() {
 
       setVoteTxHash(result.transactionHash);
       refresh();
+      voteTransactions.refresh();
     } catch (nextError) {
       setVoteError(nextError instanceof Error ? nextError.message : "Unable to submit proposal vote.");
     } finally {
@@ -80,7 +87,7 @@ export function ProposalDetailsPage() {
         title={`Proposal #${proposal.id}`}
         subtitle={proposal.title}
         action={
-          <button type="button" onClick={refresh} disabled={loading}
+          <button type="button" onClick={() => { refresh(); voteTransactions.refresh(); }} disabled={loading}
             className="rounded-xl border border-white/10 px-3 py-2 text-sm text-sky-200 disabled:opacity-50">
             {loading ? "Refreshing…" : "Refresh"}
           </button>
@@ -228,6 +235,7 @@ export function ProposalDetailsPage() {
           {voteError ? <p className="mt-4 text-sm text-rose-200">{voteError}</p> : null}
         </Panel>
       ) : null}
+      <ProposalVoteTransactions {...voteTransactions} />
     </div>
   );
 }

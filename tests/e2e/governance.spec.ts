@@ -18,6 +18,7 @@ async function mockProposal(page: Page, proposal = GOVERNANCE_PROPOSAL) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.route("https://api.mainnet.desmos.network/cosmos/tx/v1beta1/txs?*", (route) => route.fulfill({ json: { txs: [], tx_responses: [] } }));
   await page.route(poolUrl, (route) => route.fulfill({ json: { pool: { bonded_tokens: "200000000000000" } } }));
   await page.route(paramsUrl, (route) => route.fulfill({ json: { params: tallyParams } }));
 });

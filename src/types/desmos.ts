@@ -163,6 +163,24 @@ export interface ProposalTallyParams {
   vetoThreshold: string;
 }
 
+export interface ProposalVoteTransaction {
+  hash: string;
+  height: string;
+  timestamp: string;
+  code: number | null;
+  voteCount: number;
+  votes: Array<{
+    voter: string;
+    weighted: boolean;
+    options: Array<{ option: keyof ProposalTally | "unknown"; percentage?: string }>;
+  }>;
+}
+
+export interface ProposalVoteTransactionsPayload {
+  transactions: ProposalVoteTransaction[];
+  updatedAt: string;
+}
+
 export interface ProposalDetailsPayload {
   updatedAt: string;
   proposal: ProposalSummary & {

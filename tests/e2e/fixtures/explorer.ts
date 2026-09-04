@@ -37,6 +37,8 @@ type ProfileApi = {
   rpcError?: boolean;
   transaction?: unknown;
   proposal?: typeof PROPOSAL;
+  voteTransactions?: unknown;
+  voteTransactionsStatus?: number;
   delegationAddresses?: string[];
   validatorResponses?: Record<string, { validator?: unknown; status?: number }>;
   latestHeight: number;
@@ -76,6 +78,7 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       if (url.pathname === "/cosmos/gov/v1/proposals/51/tally") return Response.json({ tally: PROPOSAL.final_tally_result });
       if (url.pathname === "/cosmos/gov/v1/params/tallying") return Response.json({ params: { quorum: "0.334", threshold: "0.5", veto_threshold: "0.334" } });
       if (url.pathname.startsWith("/cosmos/gov/v1/proposals/")) return Response.json({ error: "Not found" }, { status: 404 });
+      if (url.pathname === "/cosmos/tx/v1beta1/txs") return Response.json(state.voteTransactions ?? { txs: [], tx_responses: [] }, { status: state.voteTransactionsStatus ?? 200 });
       if (url.pathname.startsWith("/cosmos/tx/v1beta1/txs/")) {
         if (!url.pathname.endsWith(TX_HASH)) return Response.json({ error: "Not found" }, { status: 404 });
         return Response.json(state.transaction ?? { tx: { body: { memo: "Community transfer", messages: [{ "@type": "/cosmos.bank.v1beta1.MsgSend", from_address: ACCOUNT, to_address: INACTIVE_ACCOUNT, amount: [{ denom: "udsm", amount: "1000000" }] }] }, auth_info: { fee: { amount: [] } } },

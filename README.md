@@ -63,7 +63,7 @@ Use `pnpm preview` to verify the complete rendering path. Vite alone only serves
 
 ## Governance without an indexer
 
-Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the browser. Initial server-rendered HTML uses the same normalization code against the Worker's `DESMOS_REST_URL`. They also work with static SPA hosting, without initial HTML rendering. Neither path uses a transaction indexer for governance reads. The REST endpoint must allow browser requests through CORS; the default Desmos mainnet API does.
+Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the browser. Initial server-rendered HTML uses the same normalization code against the Worker's `DESMOS_REST_URL`. They also work with static SPA hosting, without initial HTML rendering. Governance state reads do not require transaction indexing. The REST endpoint must allow browser requests through CORS; the default Desmos mainnet API does.
 
 - Latest 20 proposals: `/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true`
 - Proposal status and stored final result: `/cosmos/gov/v1/proposals/{id}`
@@ -77,7 +77,9 @@ During voting, each option also shows `option power / bonded_tokens × 100`, and
 
 If bonded power is unavailable, malformed or zero, the tally remains visible while bonded percentages are unavailable. Missing or invalid voting thresholds leave the passing status unavailable without defaulting to assumed values. Completed proposals omit these live indicators because their final tally does not include the bonded total at voting end; using today's pool would misrepresent historical participation. Unavailable tallies and stale refreshes are shown explicitly.
 
-These are governance state queries, so transaction search/indexing is unnecessary. This does not provide a historical vote-change timeline. Other explorer views and wallet RPC proxying still use the existing Worker.
+Below the vote actions, recent vote transactions come from `/cosmos/tx/v1beta1/txs` with `events=proposal_vote.proposal_id='{id}'`, `order_by=2`, `page=1`, and `limit=10`. The numeric order enum is required by Desmos's REST gateway. This uses the connected node's existing transaction index, with no separate indexer, database or new Worker API. Missing or disabled transaction search leaves only this optional section unavailable; the tally still works. Initial HTML gives this optional request a two-second timeout.
+
+The list links transactions, voters and blocks, supports v1/v1beta1 standard and weighted votes (including authz-wrapped votes), and filters decoded messages to the requested proposal. At most three matching vote messages are previewed per transaction to keep multi-message transactions compact. The list refreshes every 30 seconds, on manual refresh and after a successful vote. These are recent submissions, not current ballots or voting-power totals; voters may vote again and the node may not retain a complete history. Other explorer views and wallet RPC proxying still use the existing Worker.
 
 ## Notes
 
