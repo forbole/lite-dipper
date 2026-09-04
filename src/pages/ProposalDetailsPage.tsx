@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Panel } from "../components/ui/Panel";
 import { StatusPill } from "../components/ui/StatusPill";
+import { ProposalVotingProgress, VOTE_OPTIONS } from "../components/governance/ProposalVotingProgress";
 import { useApiResource } from "../hooks/useApiResource";
 import { formatDateTime, formatPreciseDsmFromMicro, formatProposalStatus } from "../lib/format";
 import { getProposalDetails, tallyPercentage } from "../lib/governance";
@@ -42,9 +43,10 @@ export function ProposalDetailsPage() {
   const proposal = data.proposal;
   const isVotingPeriod = proposal.status === "PROPOSAL_STATUS_VOTING_PERIOD";
   const tally = proposal.tally;
-  const totalVotingPower = tally
+  const totalVotedPower = tally
     ? Object.values(tally).reduce((total, amount) => total + BigInt(amount), 0n)
     : 0n;
+  const bondedPower = isVotingPeriod && proposal.bondedTokens ? BigInt(proposal.bondedTokens) : undefined;
 
   async function handleVoteSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -126,7 +128,7 @@ export function ProposalDetailsPage() {
       {proposal.tallyKind ? (
         <Panel
           title={proposal.tallyKind === "live" ? "Live Tally" : "Final Tally"}
-          subtitle="Stake-weighted voting power in DSM; percentages include abstentions"
+          subtitle="Stake-weighted voting power in DSM; votes cast include abstentions"
         >
           {proposal.tallyError ? (
             <p role="alert" className="text-sm text-amber-200">
@@ -135,25 +137,48 @@ export function ProposalDetailsPage() {
           ) : null}
           {tally ? (
             <>
+              {bondedPower !== undefined ? <ProposalVotingProgress tally={tally} bondedPower={bondedPower} params={proposal.tallyParams} /> : null}
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {([
-                  ["Yes", tally.yes], ["No", tally.no],
-                  ["Abstain", tally.abstain], ["No With Veto", tally.noWithVeto]
-                ] as const).map(([label, amount]) => (
-                  <div key={label} className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/45 p-4">
-                    <p className="text-sm text-slate-400">{label}</p>
-                    <p className="mt-2 break-words text-white">{formatPreciseDsmFromMicro(amount)}</p>
-                    <p className="mt-1 text-sm text-slate-300">{tallyPercentage(amount, totalVotingPower)}</p>
+                {VOTE_OPTIONS.map((option) => (
+                  <div key={option.key} className={`min-w-0 rounded-2xl border ${option.border} bg-slate-950/45 p-4`}>
+                    <p className={`flex items-center gap-2 text-sm ${option.text}`}>
+                      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${option.dot}`} />
+                      {option.label}
+                    </p>
+                    <p className="mt-2 break-words text-white">{formatPreciseDsmFromMicro(tally[option.key])}</p>
+                    <p className="mt-1 text-sm text-slate-300">{tallyPercentage(tally[option.key], totalVotedPower)} of votes cast</p>
+                    {bondedPower !== undefined ? (
+                      <p className={`mt-1 text-sm ${option.text}`}>{tallyPercentage(tally[option.key], bondedPower)} of bonded power</p>
+                    ) : null}
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-sm text-slate-300">
-                Total voted: {formatPreciseDsmFromMicro(totalVotingPower.toString())}
-              </p>
-              {totalVotingPower === 0n ? <p className="mt-2 text-sm text-slate-400">No voting power recorded.</p> : null}
-              {isVotingPeriod ? (
-                <p className="mt-2 text-xs text-slate-400">The tally can change until voting ends. The chain determines the final outcome.</p>
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-300">
+                <p>Total voted: {formatPreciseDsmFromMicro(totalVotedPower.toString())}</p>
+                {bondedPower !== undefined ? (
+                  <p>Current bonded power: {formatPreciseDsmFromMicro(bondedPower.toString())}</p>
+                ) : null}
+              </div>
+              {proposal.bondedTokensError ? (
+                <p role="alert" className="mt-2 text-sm text-amber-200">
+                  Bonded power is currently unavailable; participation percentages cannot be calculated. {proposal.bondedTokensError} Try refreshing.
+                </p>
               ) : null}
+              {proposal.tallyParamsError ? (
+                <p role="alert" className="mt-2 text-sm text-amber-200">
+                  Voting thresholds are currently unavailable; passing status cannot be calculated. {proposal.tallyParamsError} Try refreshing.
+                </p>
+              ) : null}
+              {totalVotedPower === 0n ? <p className="mt-2 text-sm text-slate-400">No voting power recorded.</p> : null}
+              {isVotingPeriod ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  Participation includes abstentions and uses the latest tally and bonded total. These can change until voting ends. The chain determines the final outcome.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-slate-400">
+                  Historical participation is unavailable because the bonded total at voting end is not provided with the final tally.
+                </p>
+              )}
             </>
           ) : null}
         </Panel>

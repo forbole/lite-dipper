@@ -1,10 +1,23 @@
 import { expect } from "@playwright/test";
-import { test, OPERATOR, ACCOUNT, INACTIVE_OPERATOR, PROFILE, TX_HASH } from "./fixtures/explorer";
+import { test, OPERATOR, ACCOUNT, INACTIVE_OPERATOR, PROFILE, TX_HASH, PROPOSAL } from "./fixtures/explorer";
 
 test.beforeEach(async ({ profileApi }) => { profileApi.serveDocuments = true; });
 
 test.describe("public HTML without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
+  test("renders live participation and threshold progress in the initial HTML", async ({ page, profileApi }) => {
+    profileApi.proposal = { ...PROPOSAL, status: "PROPOSAL_STATUS_VOTING_PERIOD" };
+    const response = await page.goto("/proposals/51");
+    expect(response?.status()).toBe(200);
+    await expect(page.getByText("Quorum not met", { exact: true })).toBeVisible();
+    await expect(page.getByText("Participation: 0.08%", { exact: true })).toBeVisible();
+    await expect(page.getByText("90.00% of votes cast", { exact: true })).toBeVisible();
+    await expect(page.getByText("0.07% of bonded power", { exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Bonded voting power participation" })).toHaveAttribute("aria-valuenow", "0.08");
+    expect(profileApi.requests).toContain("/cosmos/gov/v1/params/tallying");
+    expect(profileApi.requests).toContain("/cosmos/staking/v1beta1/pool");
+  });
+
   const pages = [
     ["/", "Desmos Blockchain Explorer", "Latest Height"],
     ["/validators", "Desmos Validators", "Apollo Community"],

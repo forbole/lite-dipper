@@ -36,6 +36,7 @@ type ProfileApi = {
   unavailable: boolean;
   rpcError?: boolean;
   transaction?: unknown;
+  proposal?: typeof PROPOSAL;
   delegationAddresses?: string[];
   validatorResponses?: Record<string, { validator?: unknown; status?: number }>;
   latestHeight: number;
@@ -70,8 +71,10 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       if (state.rpcError && ["/status", "/tx_search"].includes(url.pathname)) return Response.json({ error: { code: -32603, message: "Internal error" } });
       if (state.unavailable) return Response.json({ error: "Service unavailable" }, { status: 503 });
       if (url.pathname === "/cosmos/staking/v1beta1/pool") return Response.json({ pool: { bonded_tokens: "12345000000" } });
-      if (url.pathname === "/cosmos/gov/v1/proposals") return Response.json({ proposals: [PROPOSAL] });
-      if (url.pathname === "/cosmos/gov/v1/proposals/51") return Response.json({ proposal: PROPOSAL });
+      if (url.pathname === "/cosmos/gov/v1/proposals") return Response.json({ proposals: [state.proposal ?? PROPOSAL] });
+      if (url.pathname === "/cosmos/gov/v1/proposals/51") return Response.json({ proposal: state.proposal ?? PROPOSAL });
+      if (url.pathname === "/cosmos/gov/v1/proposals/51/tally") return Response.json({ tally: PROPOSAL.final_tally_result });
+      if (url.pathname === "/cosmos/gov/v1/params/tallying") return Response.json({ params: { quorum: "0.334", threshold: "0.5", veto_threshold: "0.334" } });
       if (url.pathname.startsWith("/cosmos/gov/v1/proposals/")) return Response.json({ error: "Not found" }, { status: 404 });
       if (url.pathname.startsWith("/cosmos/tx/v1beta1/txs/")) {
         if (!url.pathname.endsWith(TX_HASH)) return Response.json({ error: "Not found" }, { status: 404 });

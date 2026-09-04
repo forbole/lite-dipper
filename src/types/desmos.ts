@@ -157,6 +157,12 @@ export interface ProposalTally {
   noWithVeto: string;
 }
 
+export interface ProposalTallyParams {
+  quorum: string;
+  threshold: string;
+  vetoThreshold: string;
+}
+
 export interface ProposalDetailsPayload {
   updatedAt: string;
   proposal: ProposalSummary & {
@@ -167,6 +173,10 @@ export interface ProposalDetailsPayload {
     tally?: ProposalTally;
     tallyKind?: "live" | "final";
     tallyError?: string;
+    bondedTokens?: string;
+    bondedTokensError?: string;
+    tallyParams?: ProposalTallyParams;
+    tallyParamsError?: string;
   };
 }
 

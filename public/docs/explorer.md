@@ -28,7 +28,11 @@ Public HTML and API responses may be cached briefly. Pages refresh after loading
 
 Proposal state comes from `/cosmos/gov/v1/proposals`. During voting, `/cosmos/gov/v1/proposals/{id}/tally` supplies the current stake-weighted tally. Completed proposals use their stored final tally. The browser refreshes governance data directly from REST every 30 seconds and after a successful vote.
 
-Tally percentages show each option's share of total voted power, including abstentions. They are not voter counts, overall turnout or predictions of whether a proposal will pass. These state queries do not require transaction indexing and do not provide a historical vote-change timeline.
+Tally percentages show each option's share of total voted power, including abstentions. During voting, the page also queries `/cosmos/staking/v1beta1/pool` for `bonded_tokens`: each option's share of bonded power is its tally divided by that total, and participation is the sum of all options divided by that total. These live estimates refresh together, but are not pinned to the same block. Unavailable or zero bonded totals leave participation unavailable while preserving the tally.
+
+The four options use matching colors in the tally cards and participation bar. Live progress uses `/cosmos/gov/v1/params/tallying` for the current quorum, approval and veto thresholds. Participation must meet or exceed quorum; Yes must exceed the approval threshold among non-abstaining votes; No With Veto blocks passage only above its threshold among all votes cast. All-abstain votes cannot pass. Approval and veto bars show these separate denominators. Status labels describe the current estimate if voting ended now, not a guaranteed outcome; the chain decides when voting ends. Missing thresholds leave the status unavailable.
+
+Completed proposals only show shares of votes cast. Their final tally does not include the bonded total at voting end, and today's bonded power would misrepresent historical participation. Percentages measure stake-weighted power, not voter counts. These state queries do not require transaction indexing and do not provide a historical vote-change timeline.
 
 ## Validator profiles
 

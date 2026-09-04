@@ -68,8 +68,14 @@ Proposal list and detail pages query `DESMOS_CHAIN.restUrl` directly from the br
 - Latest 20 proposals: `/cosmos/gov/v1/proposals?pagination.limit=20&pagination.reverse=true`
 - Proposal status and stored final result: `/cosmos/gov/v1/proposals/{id}`
 - Live, stake-weighted result during voting: `/cosmos/gov/v1/proposals/{id}/tally`
+- Current bonded voting power during voting: `/cosmos/staking/v1beta1/pool` (`bonded_tokens`)
+- Current voting thresholds: `/cosmos/gov/v1/params/tallying`
 
-Both views refresh every 30 seconds. Details also offer manual refresh and refresh after a successful vote. Active proposals always query `/tally`, because `final_tally_result` is a zero-filled placeholder until voting finishes. Completed proposals use the stored final result. Tally amounts are displayed in DSM with exact integer arithmetic; percentages are shares of total voted power including abstentions, not turnout or pass/fail predictions. Unavailable tallies and stale refreshes are shown explicitly.
+Both views refresh every 30 seconds. Details also offer manual refresh and refresh after a successful vote. Active proposals always query `/tally`, because `final_tally_result` is a zero-filled placeholder until voting finishes. Completed proposals use the stored final result. Tally amounts and percentages use exact integer arithmetic, with amounts displayed in DSM and percentages rounded to two decimals. Each option shows its share of total voted power, including abstentions.
+
+During voting, each option also shows `option power / bonded_tokens × 100`, and participation is `total voted power / bonded_tokens × 100`. The live tally, pool and thresholds are queried together on each refresh; these are current estimates, not a snapshot pinned to one block. Color-coded bars show participation against quorum, Yes support among non-abstaining votes, and veto power among all votes cast. The current status follows the [Desmos SDK tally rules](https://github.com/desmos-labs/cosmos-sdk/blob/v0.47.10-desmos/x/gov/keeper/tally.go): participation must meet or exceed quorum, Yes must strictly exceed the approval threshold, and veto blocks passage only strictly above its threshold. All-abstain tallies cannot pass. Comparisons use unrounded integer ratios; the chain determines the final outcome.
+
+If bonded power is unavailable, malformed or zero, the tally remains visible while bonded percentages are unavailable. Missing or invalid voting thresholds leave the passing status unavailable without defaulting to assumed values. Completed proposals omit these live indicators because their final tally does not include the bonded total at voting end; using today's pool would misrepresent historical participation. Unavailable tallies and stale refreshes are shown explicitly.
 
 These are governance state queries, so transaction search/indexing is unnecessary. This does not provide a historical vote-change timeline. Other explorer views and wallet RPC proxying still use the existing Worker.
 
