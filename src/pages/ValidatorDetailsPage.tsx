@@ -31,7 +31,8 @@ export function ValidatorDetailsPage() {
   const { connection, delegate, undelegate, redelegate } = useWallet();
   const validatorAddress = validatorAddressParam ?? "";
   const { data, error, loading } = useApiResource<ValidatorDetailsPayload>(`/api/validators/${validatorAddress}`, {
-    enabled: Boolean(validatorAddressParam)
+    enabled: Boolean(validatorAddressParam),
+    pollMs: 30_000
   });
   const {
     data: walletOverview,

@@ -22,7 +22,7 @@ The default REST endpoint is `https://api.mainnet.desmos.network` and the defaul
 
 The native display token is DSM. One DSM equals 1,000,000 `udsm`. API amounts often use integer strings in `udsm`; reward amounts can include decimal fractions of `udsm`. Pages format these values for display.
 
-Public HTML and API responses may be cached briefly. Pages refresh after loading, so a search snippet or shared preview is not an authoritative live balance or voting result. Check the page and its upstream data when freshness matters.
+Public HTML and API responses may be cached briefly at the edge. Dynamic pages refresh automatically every 10–30 seconds and when you return to the tab or reconnect. Validator lists and details refresh every 30 seconds. Browser API reads bypass the HTTP cache, and stalled requests time out so later refreshes can recover. A search snippet or shared preview is not an authoritative live balance or voting result. Check the page and its upstream data when freshness matters.
 
 ## Governance
 

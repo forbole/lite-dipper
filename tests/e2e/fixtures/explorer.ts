@@ -1,6 +1,6 @@
 import { test as base, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type workerType from "../../../worker/index";
 
 export const OPERATOR = "desmosvaloper17lca9smrdlwkznr92hypzrgsjkelnxeaacgrwq";
@@ -32,6 +32,8 @@ export const PROPOSAL = { id: "51", title: "Community funding", summary: "Suppor
   final_tally_result: { yes_count: "9000000", no_count: "1000000", abstain_count: "0", no_with_veto_count: "0" }, messages: [] };
 
 type ProfileApi = {
+  cacheEnabled?: boolean;
+  versionId?: string;
   serveDocuments: boolean;
   unavailable: boolean;
   rpcError?: boolean;
@@ -56,10 +58,15 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
     // production React bundle so these tests exercise the Worker's SSR path.
     const worker: typeof workerType = (await import("../../../node_modules/.cache/lite-dipper-test-worker/worker.mjs")).default;
     const state: ProfileApi = { profile: structuredClone(PROFILE), status: 200, brokenImages: false, requests: [], serveDocuments: false, unavailable: false, latestHeight: 3, request: async () => new Response() };
+    const restOrigin = `https://validator-${randomUUID()}.test`;
+    const cachedResponses = new Map<string, Response>();
     const originalFetch = globalThis.fetch;
     const originalCaches = Object.getOwnPropertyDescriptor(globalThis, "caches");
     Object.defineProperty(globalThis, "caches", { configurable: true, value: {
-      open: async () => ({ match: async () => undefined, put: async () => {} })
+      open: async (name: string) => ({
+        match: async (request: Request) => state.cacheEnabled ? cachedResponses.get(`${name}:${request.url}`)?.clone() : undefined,
+        put: async (request: Request, response: Response) => { if (state.cacheEnabled) cachedResponses.set(`${name}:${request.url}`, response.clone()); }
+      })
     } });
     // Keep the real validator normalization and account derivation in the path.
     // Only replace the public REST service and Keybase lookup.
@@ -68,7 +75,7 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       if (url.origin === "https://keybase.io") return Response.json({ them: [{
         basics: { username: "staking-name" }, pictures: { primary: { url: "https://profile-images.test/keybase.svg" } }
       }] });
-      if (url.origin !== "https://validator-rest.test") throw new Error(`Unexpected upstream: ${url}`);
+      if (url.origin !== restOrigin) throw new Error(`Unexpected upstream: ${url}`);
       state.requests.push(url.pathname);
       if (state.rpcError && ["/status", "/tx_search"].includes(url.pathname)) return Response.json({ error: { code: -32603, message: "Internal error" } });
       if (state.unavailable) return Response.json({ error: "Service unavailable" }, { status: 503 });
@@ -133,12 +140,13 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
     state.request = async (path, init) => {
       const pending: Promise<unknown>[] = [];
       const response = await worker.fetch(new Request(new URL(path, "https://lite.desmos.network"), init), {
-        DESMOS_REST_URL: "https://validator-rest.test", DESMOS_RPC_URL: "https://validator-rest.test",
+        DESMOS_REST_URL: restOrigin, DESMOS_RPC_URL: restOrigin,
+        CF_VERSION_METADATA: state.versionId ? { id: state.versionId, tag: "test", timestamp: "2026-09-04T00:00:00Z" } : undefined,
         ASSETS: { fetch: async (input: Request) => {
           const path = new URL(input.url).pathname;
           try {
             const body = await readFile(new URL(`../../../dist${path}`, import.meta.url));
-            const type = path.endsWith(".html") ? "text/html" : path.endsWith(".xml") ? "application/xml" : path.endsWith(".png") ? "image/png" : "text/plain";
+            const type = path.endsWith(".html") ? "text/html" : path.endsWith(".js") ? "text/javascript" : path.endsWith(".css") ? "text/css" : path.endsWith(".xml") ? "application/xml" : path.endsWith(".png") ? "image/png" : "text/plain";
             return new Response(body, { headers: { "content-type": type } });
           } catch { return new Response("Not found", { status: 404 }); }
         } }
@@ -152,7 +160,7 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       const url = new URL(route.request().url());
       let response: Response;
       if (url.origin === "https://api.mainnet.desmos.network") {
-        response = await globalThis.fetch(new URL(url.pathname + url.search, "https://validator-rest.test"));
+        response = await globalThis.fetch(new URL(url.pathname + url.search, restOrigin));
       } else if (url.pathname.startsWith("/api/") || (state.serveDocuments && route.request().resourceType() === "document")) {
         response = await state.request(url.pathname + url.search);
       } else { return route.fallback(); }

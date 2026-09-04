@@ -45,15 +45,17 @@ pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
-The suite mocks `/api/*` and the direct Desmos governance REST requests so it stays deterministic. SEO tests also invoke the real Worker with mocked upstream services, exercise server-rendered pages with JavaScript disabled, and verify hydration, metadata navigation, error statuses, crawler files and safe serialization of untrusted chain data.
+The suite uses deterministic upstream fixtures for `/api/*` and the direct Desmos governance REST requests. SEO tests also invoke the real Worker with mocked upstream services, exercise server-rendered pages with JavaScript disabled, and verify hydration, metadata navigation, error statuses, crawler files and safe serialization of untrusted chain data. Live-refresh tests cover browser HTTP caching through a real local server, polling after hydration, stalled requests, tab restoration and deployment-specific HTML caches.
 
 ## Search and crawler support
 
 The Worker renders the existing React public pages into the initial HTML using RPC and REST queries. React hydrates that HTML for client navigation and polling. This adds no database or transaction indexer. The wallet initially renders disconnected; wallet connections and signing stay in the browser.
 
+Dynamic pages poll every 10–30 seconds, including validator details every 30 seconds. Returning to a visible tab, reconnecting or restoring a page from the browser's back/forward cache also triggers a refresh. Browser API reads bypass the HTTP cache and time out after 15 seconds so a stalled request cannot stop later polls. A failed refresh keeps previously loaded data mounted so polling can recover.
+
 Every public route has a title, description, canonical URL, Open Graph/Twitter tags and WebSite/WebPage structured data. Validator and proposal metadata use their actual content. Canonicals always use `https://lite.desmos.network`; change `SITE_ORIGIN` and the public crawler files together when changing the production domain. Wallet pages and non-production HTML responses are marked `noindex`.
 
-Unknown routes and missing records return HTTP 404. Unavailable upstream data returns HTTP 503 with `Retry-After`, without caching the error as a successful page. Static asset fallback is disabled so missing assets do not become soft 404s. Trailing slashes and lowercase transaction hashes redirect to their canonical routes. Public HTML is cached for 30 seconds, and wallet HTML is never cached.
+Unknown routes and missing records return HTTP 404. Unavailable upstream data returns HTTP 503 with `Retry-After`, without caching the error as a successful page. Static asset fallback is disabled so missing assets do not become soft 404s. Trailing slashes and lowercase transaction hashes redirect to their canonical routes. Browsers must revalidate public HTML and API responses; the Worker retains short shared-cache TTLs. Public HTML has a 30-second edge cache scoped to `CF_VERSION_METADATA.id` so an earlier deployment cannot supply obsolete asset URLs. Local preview, deployments without version metadata and wallet HTML bypass the document cache.
 
 `/robots.txt` points to `/sitemap.xml`. The sitemap includes public entry pages, active validators, the latest 20 proposals, recent blocks and recent transactions. It is an entry point, not a complete chain archive; normal links, including block pagination, support further discovery.
 

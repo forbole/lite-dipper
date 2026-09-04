@@ -35,7 +35,7 @@ export async function renderDocument(request: Request, assets: Fetcher, snapshot
   const status = snapshot.status ?? 200;
   const headers = new Headers({
     "content-type": "text/html; charset=utf-8",
-    "cache-control": status >= 500 || resolvePage(snapshot.path).kind === "wallet" ? "no-store" : "public, max-age=0, s-maxage=30",
+    "cache-control": status >= 500 || resolvePage(snapshot.path).kind === "wallet" ? "no-store" : "public, max-age=0, s-maxage=30, must-revalidate",
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",
     "content-security-policy": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",

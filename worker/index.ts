@@ -9,6 +9,7 @@ import { renderDocument, renderSitemap } from "./seo";
 
 interface Env {
   ASSETS: Fetcher;
+  CF_VERSION_METADATA?: WorkerVersionMetadata;
   DESMOS_CHAIN_ID: string;
   DESMOS_CHAIN_NAME: string;
   DESMOS_RPC_URL: string;
@@ -257,11 +258,12 @@ async function withCache(
   request: Request,
   ctx: ExecutionContext,
   ttl: number,
-  loader: () => Promise<Response>
+  loader: () => Promise<Response>,
+  cacheName = "lite-dipper-api-v2"
 ) {
   if (ttl <= 0) {
-    // Wallet reads must bypass existing edge entries and browser caches after
-    // transaction confirmation, including entries from previous deployments.
+    // Uncached routes must bypass existing edge entries and browser caches,
+    // including wallet reads after a committed transaction and local HTML.
     const response = await loader();
     response.headers.set("cache-control", "no-store");
     return response;
@@ -271,7 +273,7 @@ async function withCache(
     return loader();
   }
 
-  const cache = await caches.open("lite-dipper-api");
+  const cache = await caches.open(cacheName);
   const cachedResponse = await cache.match(request);
 
   if (cachedResponse) {
@@ -282,7 +284,11 @@ async function withCache(
 
   if (response.ok) {
     const cacheable = new Response(response.body, response);
-    cacheable.headers.set("cache-control", `public, max-age=${ttl}`);
+    // Browsers should revalidate live data. Keep the short shared-cache TTL,
+    // and preserve explicit HTML/avatar policies rather than overwrite them.
+    if (!cacheable.headers.has("cache-control")) {
+      cacheable.headers.set("cache-control", `public, max-age=0, s-maxage=${ttl}, must-revalidate`);
+    }
     ctx.waitUntil(cache.put(request, cacheable.clone()));
     return cacheable;
   }
@@ -1264,13 +1270,20 @@ async function handleDocument(request: Request, env: Env, ctx: ExecutionContext)
     return Response.redirect(destination, 308);
   }
   const cacheRequest = new Request(new URL(route.path, url.origin), request);
-  return withCache(cacheRequest, ctx, ["wallet", "notfound"].includes(route.kind) ? 0 : 30, async () => {
+  const version = env.CF_VERSION_METADATA?.id;
+  // Wrangler can rewrite localhost to the configured route hostname. Only
+  // cache documents for HTTPS origins; local HTTP previews must stay fresh.
+  const local = url.protocol !== "https:" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  // Cached HTML embeds hashed JS/CSS URLs. Never serve another deployment's
+  // document after those assets have changed, or it can remain static forever.
+  const documentTtl = !version || local || ["wallet", "notfound"].includes(route.kind) ? 0 : 30;
+  return withCache(cacheRequest, ctx, documentTtl, async () => {
     const snapshot = await withTimeout(loadPublicPage(env, route), 10_000, {
       path: route.path, resources: {}, status: 503,
       errors: { [route.key]: { status: 503, message: "Desmos data is temporarily unavailable. Please try again shortly." } }
     });
     return renderDocument(request, env.ASSETS, snapshot);
-  });
+  }, `lite-dipper-html-${version}`);
 }
 
 export default {

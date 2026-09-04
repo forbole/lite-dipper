@@ -66,6 +66,19 @@ export function useApiResource<T>(
 
     void load();
 
+    // Browsers throttle timers in background/suspended tabs. Refresh as soon
+    // as the user returns or the connection recovers, without reloading HTML.
+    const resume = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) resume();
+    };
+    window.addEventListener("focus", resume);
+    window.addEventListener("online", resume);
+    window.addEventListener("pageshow", restore);
+    document.addEventListener("visibilitychange", resume);
+
     if (pollMs > 0) {
       intervalId = window.setInterval(() => {
         void load();
@@ -74,6 +87,10 @@ export function useApiResource<T>(
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("online", resume);
+      window.removeEventListener("pageshow", restore);
+      document.removeEventListener("visibilitychange", resume);
 
       if (intervalId) {
         window.clearInterval(intervalId);

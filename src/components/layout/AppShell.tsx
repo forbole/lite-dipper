@@ -49,7 +49,9 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
   const { resources, errors, initialPath, initialStatus } = usePageData();
   const route = resolvePage(`${location.pathname}${location.search}`);
-  const status = errors[route.key]?.status ?? (route.path === initialPath && !resources[route.key] ? initialStatus : 200);
+  // Keep a populated page mounted when a later refresh fails. Replacing it
+  // with a 404 screen would also remove the hook that can recover its data.
+  const status = resources[route.key] ? 200 : errors[route.key]?.status ?? (route.path === initialPath ? initialStatus : 200);
   useDocumentMetadata(pageMetadata(route, resources, status));
 
   useEffect(() => {
