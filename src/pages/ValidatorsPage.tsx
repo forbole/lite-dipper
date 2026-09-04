@@ -75,6 +75,7 @@ export function ValidatorsPage() {
                     moniker={validator.moniker}
                     identity={validator.identity}
                     size="md"
+                    showProfileBadge
                   />
                   <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
                     <StatusPill status={validator.jailed ? "Jailed" : validator.status === "BOND_STATUS_BONDED" ? "Bonded" : "Inactive"} />

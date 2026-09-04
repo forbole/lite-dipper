@@ -243,8 +243,8 @@ test("renders profile names as text and rejects unsafe list avatar URLs", async 
   await page.goto("/validators");
   const row = page.locator(`a[href="/validators/${OPERATOR}"]`);
   await expect(row.getByText(nickname, { exact: true })).toBeVisible();
-  await expect(row.getByRole("img")).toHaveCount(1);
-  await expect(row.getByRole("img")).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
+  await expect(row.locator("img")).toHaveCount(1);
+  await expect(row.getByRole("img", { name: `${nickname} avatar`, exact: true })).toHaveAttribute("src", `/api/keybase/avatar/${IDENTITY}`);
   await expect(row.locator("[onerror], script, iframe")).toHaveCount(0);
 });
 
