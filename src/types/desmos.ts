@@ -213,6 +213,8 @@ export interface AccountDetailsPayload {
     validatorAddress: string;
     moniker?: string;
     identity?: string;
+    validatorStatus?: string | null;
+    validatorJailed?: boolean | null;
     amount: string;
   }>;
   unbondingDelegations: Array<{

@@ -36,6 +36,8 @@ type ProfileApi = {
   unavailable: boolean;
   rpcError?: boolean;
   transaction?: unknown;
+  delegationAddresses?: string[];
+  validatorResponses?: Record<string, { validator?: unknown; status?: number }>;
   latestHeight: number;
   request: (path: string, init?: RequestInit) => Promise<Response>;
   profile: unknown;
@@ -78,6 +80,10 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
       }
       if (url.pathname === "/cosmos/staking/v1beta1/validators") return Response.json({ validators: [STAKING_VALIDATOR] });
       if (url.pathname === `/cosmos/staking/v1beta1/validators/${OPERATOR}`) return Response.json({ validator: STAKING_VALIDATOR });
+      if (url.pathname.startsWith("/cosmos/staking/v1beta1/validators/")) {
+        const override = state.validatorResponses?.[url.pathname.split("/").at(-1)!];
+        if (override) return Response.json({ validator: override.validator }, { status: override.status ?? 200 });
+      }
       if (url.pathname === `/desmos/profiles/v3/profiles/${ACCOUNT}`) {
         await state.profileReady;
         return Response.json(
@@ -88,9 +94,9 @@ export const test = base.extend<{ profileApi: ProfileApi }>({
         ...PROFILE, account: { address: INACTIVE_ACCOUNT }, nickname: "Inactive Community"
       } });
       if (url.pathname.includes("/balances/")) return Response.json({ balances: [{ denom: "udsm", amount: "100000000" }] });
-      if (url.pathname.includes("/delegations/")) return Response.json({ delegation_responses: [{
-        delegation: { validator_address: OPERATOR }, balance: { amount: "50000000", denom: "udsm" }
-      }] });
+      if (url.pathname.includes("/delegations/")) return Response.json({ delegation_responses: (state.delegationAddresses ?? [OPERATOR]).map((validator_address) => ({
+        delegation: { validator_address }, balance: { amount: "50000000", denom: "udsm" }
+      })) });
       if (url.pathname.endsWith("/unbonding_delegations")) return Response.json({ unbonding_responses: [{
         validator_address: OPERATOR, entries: [{ balance: "4000000", completion_time: "2030-01-01T00:00:00Z" }]
       }] });

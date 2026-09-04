@@ -976,6 +976,26 @@ async function getAccountDetails(env: Env, address: string) {
     withTimeout(getRecentTransactionsForAccount(env, address, 12).catch(() => []), 5_000, [])
   ]);
   const validatorDirectory = await validatorDirectoryPromise;
+  const delegations = delegationsResponse?.delegation_responses ?? [];
+  // The shared directory contains only bonded validators. Resolve the other
+  // delegation targets directly, without adding them to the active set cache.
+  const delegationValidators = new Map(validatorDirectory.byOperatorAddress);
+  const missingValidators = [...new Set<string>(delegations
+    .map((delegation: any) => delegation?.delegation?.validator_address)
+    .filter((operator: unknown): operator is string => typeof operator === "string" && Boolean(operator)))]
+    .filter((operator) => !delegationValidators.has(operator));
+  await Promise.all(missingValidators.map(async (operator) => {
+    try {
+      const response = await fetchRestJson(env, `/cosmos/staking/v1beta1/validators/${encodeURIComponent(operator)}`, undefined, {
+        signal: AbortSignal.timeout(1_500)
+      });
+      if (response?.validator?.operator_address === operator) {
+        delegationValidators.set(operator, await normalizeValidator(response.validator));
+      }
+    } catch {
+      // Optional validator metadata must not hide balances or delegations.
+    }
+  }));
 
   return {
     address,
@@ -983,14 +1003,18 @@ async function getAccountDetails(env: Env, address: string) {
       denom: balance?.denom ?? "",
       amount: balance?.amount ?? "0"
     })),
-    delegations: (delegationsResponse?.delegation_responses ?? []).map((delegation: any) => ({
-      validatorAddress: delegation?.delegation?.validator_address ?? "",
-      moniker:
-        validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.moniker ?? "",
-      identity:
-        validatorDirectory.byOperatorAddress.get(delegation?.delegation?.validator_address ?? "")?.identity ?? "",
-      amount: delegation?.balance?.amount ?? "0"
-    })),
+    delegations: delegations.map((delegation: any) => {
+      const validatorAddress = delegation?.delegation?.validator_address ?? "";
+      const validator = delegationValidators.get(validatorAddress);
+      return {
+        validatorAddress,
+        moniker: validator?.moniker ?? "",
+        identity: validator?.identity ?? "",
+        validatorStatus: validator?.status ?? null,
+        validatorJailed: validator?.jailed ?? null,
+        amount: delegation?.balance?.amount ?? "0"
+      };
+    }),
     unbondingDelegations: (unbondingDelegationsResponse?.unbonding_responses ?? [])
       .flatMap((unbondingDelegation: any) => {
         const validatorAddress = unbondingDelegation?.validator_address ?? "";

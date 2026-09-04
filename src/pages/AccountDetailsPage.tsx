@@ -17,6 +17,17 @@ import {
 } from "../lib/format";
 import type { AccountDetailsPayload } from "../types/desmos";
 
+function delegationValidatorStatus(delegation: AccountDetailsPayload["delegations"][number]): string {
+  if (delegation.validatorJailed === true) return "Jailed";
+  if (delegation.validatorJailed !== false) return "Status unavailable";
+  switch (delegation.validatorStatus) {
+    case "BOND_STATUS_BONDED": return "Bonded";
+    case "BOND_STATUS_UNBONDING":
+    case "BOND_STATUS_UNBONDED": return "Inactive";
+    default: return "Status unavailable";
+  }
+}
+
 export function AccountDetailsPage() {
   const { accountAddress: accountAddressParam } = useParams();
   const accountAddress = accountAddressParam ?? "";
@@ -114,11 +125,14 @@ export function AccountDetailsPage() {
                         to={`/validators/${delegation.validatorAddress}`}
                         className="block rounded-2xl border border-white/[0.08] bg-slate-950/45 px-4 py-3 text-sm text-slate-200 transition hover:border-sky-300/30 hover:bg-white/[0.06]"
                       >
-                        <ValidatorIdentity
-                          operatorAddress={delegation.validatorAddress}
-                          moniker={delegation.moniker}
-                          identity={delegation.identity}
-                        />
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <ValidatorIdentity
+                            operatorAddress={delegation.validatorAddress}
+                            moniker={delegation.moniker}
+                            identity={delegation.identity}
+                          />
+                          <StatusPill status={delegationValidatorStatus(delegation)} />
+                        </div>
                         <div className="mt-2">{formatFixedDsmFromMicro(delegation.amount)}</div>
                       </Link>
                     ))
